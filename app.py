@@ -10,11 +10,17 @@ def american_to_decimal(odds):
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arbitrage Edge", layout="wide")
 
+# Updated Styling: Professional but readable
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; }
-    div[data-testid="stExpander"] { background-color: #161b22 !important; border: 1px solid #30363d !important; border-radius: 8px !important; }
-    .stMetric { background-color: #1c2128; border: 1px solid #30363d; padding: 10px; border-radius: 10px; }
+    .main { background-color: #f8f9fa; }
+    div[data-testid="stExpander"] { 
+        background-color: white !important; 
+        border: 1px solid #dee2e6 !important; 
+        border-radius: 8px !important;
+        margin-bottom: 10px !important;
+    }
+    .stMetric { background-color: #ffffff; border: 1px solid #dee2e6; padding: 10px; border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -22,9 +28,8 @@ st.markdown("""
 with st.sidebar:
     st.title("🛡️ Arbitrage Edge")
     st.markdown("---")
-    st.subheader("System Monitor")
     quota_placeholder = st.empty()
-    st.info("Status: Deep Scanning Big 5")
+    st.info("Status: Big 5 Multi-Key Scan")
 
 # --- INPUT AREA ---
 with st.form("input_panel"):
@@ -33,15 +38,15 @@ with st.form("input_panel"):
         promo_type = st.selectbox("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"])
         source_book_display = st.selectbox("Source Book", ["DraftKings", "FanDuel", "Caesars", "Fanatics", "theScore Bet"])
         
-        # Precise API Keys for the Big 5
+        # Mapping to multiple possible internal keys for reliability
         book_map = {
-            "DraftKings": "draftkings",
-            "FanDuel": "fanduel",
-            "Caesars": "williamhill_us", # This is the key for Caesars in the US
-            "Fanatics": "fanatics",
-            "theScore Bet": "thescore"
+            "DraftKings": ["draftkings"],
+            "FanDuel": ["fanduel"],
+            "Caesars": ["williamhill_us", "caesars"], # Dual key check
+            "Fanatics": ["fanatics"],
+            "theScore Bet": ["thescore"]
         }
-        source_book_key = book_map[source_book_display]
+        source_keys = book_map[source_book_display]
 
     with col2:
         sport_cat = st.selectbox("Sport", ["All Sports", "NBA", "NFL", "NHL", "NCAAB"])
@@ -57,7 +62,7 @@ with st.form("input_panel"):
             boost_val = st.number_input("Boost (%)", min_value=1, value=50)
         else:
             boost_val = 0
-            st.write("Optimizing for Max Conversion...")
+            st.write("Targeting Max Conversion...")
 
     run_scan = st.form_submit_button("🔥 RUN DEEP SCAN")
 
@@ -65,9 +70,8 @@ with st.form("input_panel"):
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
-        st.error("API Key not found in Secrets.")
+        st.error("API Key not found.")
     else:
-        # API Sport Keys
         sport_map = {
             "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab"],
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"]
@@ -77,9 +81,8 @@ if run_scan:
         now = datetime.now(timezone.utc)
         tomorrow_midnight = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
 
-        with st.spinner("Checking market feeds..."):
+        with st.spinner("Checking Big 5 Feeds..."):
             for sport_key in sport_map[sport_cat]:
-                # Pull odds for US region
                 url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
                 
@@ -95,18 +98,19 @@ if run_scan:
                             if start_time <= now: continue
                             if time_horizon == "Today & Tomorrow" and start_time > tomorrow_midnight: continue
                             
-                            # Extract odds for the user-selected Source Book
                             source_outcomes = []
                             other_outcomes = []
                             
                             for book in game['bookmakers']:
-                                if book['key'] == source_book_key:
+                                # Check if this book is our Source (using dual keys for Caesars)
+                                if book['key'] in source_keys:
                                     for market in book['markets']:
                                         if market['key'] == 'h2h':
                                             source_outcomes = market['outcomes']
                                 else:
-                                    # Only collect hedge odds from the other 4 books
-                                    if book['key'] in book_map.values():
+                                    # Collect hedge odds from any other book in our "Big 5"
+                                    all_possible_hedge_keys = [k for keys in book_map.values() for k in keys]
+                                    if book['key'] in all_possible_hedge_keys:
                                         for market in book['markets']:
                                             if market['key'] == 'h2h':
                                                 for o in market['outcomes']:
@@ -114,19 +118,14 @@ if run_scan:
 
                             if not source_outcomes: continue
 
-                            # Calculate math for each outcome on the source book
                             for s_opt in source_outcomes:
-                                # Find the best hedge on the other team
-                                target_team = [t for t in [game['home_team'], game['away_team']] if t != s_opt['name']][0]
-                                possible_hedges = [h for h in other_outcomes if h['name'] == target_team]
+                                opp_team = [t for t in [game['home_team'], game['away_team']] if t != s_opt['name']][0]
+                                possible_hedges = [h for h in other_outcomes if h['name'] == opp_team]
                                 
                                 if not possible_hedges: continue
                                 
-                                # Pick the best hedge price (highest odds)
                                 best_hedge = max(possible_hedges, key=lambda x: x['price'])
-                                
-                                ds = american_to_decimal(s_opt['price'])
-                                dh = american_to_decimal(best_hedge['price'])
+                                ds, dh = american_to_decimal(s_opt['price']), american_to_decimal(best_hedge['price'])
 
                                 if promo_type == "Profit Boost (%)":
                                     total_ret = (max_wager * (ds - 1) * (1 + (boost_val / 100))) + max_wager
@@ -149,8 +148,7 @@ if run_scan:
                                     "s_book": source_book_display, "s_team": s_opt['name'], "s_price": s_opt['price'],
                                     "h_book": best_hedge['book'], "h_team": best_hedge['name'], "h_price": best_hedge['price']
                                 })
-                except Exception as e:
-                    continue
+                except: continue
 
         if all_opps:
             st.markdown("### 🏆 Top 5 Opportunities")
@@ -167,4 +165,4 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
         else:
-            st.warning(f"No results found for {source_book_display}. Try another book or check back later when more games are posted.")
+            st.warning(f"No results found for {source_book_display}. This happens if Caesars hasn't posted lines yet for these specific sports.")
