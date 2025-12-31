@@ -10,7 +10,6 @@ def american_to_decimal(odds):
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arbitrage Edge", layout="wide")
 
-# CLEAN UI STYLING
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
@@ -31,7 +30,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- TOP ROW: API COUNTER ---
-# We use session state to keep the number visible even between scans
 if 'remaining_requests' not in st.session_state:
     st.session_state.remaining_requests = "---"
 
@@ -41,17 +39,11 @@ with col_mid:
 
 st.divider()
 
-# --- SIDEBAR ---
-with st.sidebar:
-    st.title("🛡️ Arbitrage Edge")
-    st.info("Source: FD, DK\nHedge: FD, DK, CZR, Fanatics, Score")
-    st.caption("Updated: Dec 2025")
-
 # --- USER INPUT AREA ---
 with st.form("input_panel"):
     col1, col2 = st.columns(2)
     with col1:
-        promo_type = st.selectbox("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"])
+        promo_type = st.selectbox("Strategy", ["No-Sweat Bet", "Profit Boost (%)", "Bonus Bet (SNR)"])
         source_book_display = st.selectbox("Source Book", ["FanDuel", "DraftKings"])
         
         book_map = {
@@ -71,15 +63,13 @@ with st.form("input_panel"):
     
     c1, c2 = st.columns(2)
     with c1:
-        # UPDATED: Renamed to Max Wager
         max_wager = st.number_input("Max Wager ($)", min_value=1.0, value=50.0)
     with c2:
-        # UPDATED: Conditional visibility for Boost %
         if promo_type == "Profit Boost (%)":
             boost_val = st.number_input("Boost (%)", min_value=1, value=50)
         else:
             boost_val = 0
-            st.write("Optimizing for Max Conversion.")
+            st.info("💡 Strategy: Max Conversion Mode")
 
     run_scan = st.form_submit_button("🔥 RUN DEEP SCAN")
 
@@ -94,21 +84,18 @@ if run_scan:
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"]
         }
         
-        # Big 5 Only for Hedging
         ALLOWED_HEDGE_KEYS = ["draftkings", "fanduel", "williamhill_us", "caesars", "fanatics", "thescore"]
         all_opps = []
         now = datetime.now(timezone.utc)
         tomorrow_midnight = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
 
-        with st.spinner("Scanning Market Feeds..."):
+        with st.spinner("Searching markets..."):
             for sport_key in sport_map[sport_cat]:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
                 
                 try:
                     res = requests.get(url, params=params)
-                    
-                    # Update API Counter in session state
                     st.session_state.remaining_requests = res.headers.get('x-requests-remaining', '---')
 
                     if res.status_code == 200:
@@ -148,7 +135,7 @@ if run_scan:
                                             total_ret = max_wager * (ds - 1)
                                             hedge_needed = total_ret / dh
                                             profit = total_ret - hedge_needed
-                                        else: # No-Sweat
+                                        else: # No-Sweat (Conversion focus)
                                             refund_val = max_wager * 0.70
                                             total_ret = max_wager * ds
                                             hedge_needed = (total_ret - refund_val) / dh
@@ -163,24 +150,20 @@ if run_scan:
                                         })
                 except: continue
 
-        # RE-RUN PAGE TO UPDATE THE METRIC AT THE TOP
-        st.rerun()
-
-# Display Results Below Input Area
-if 'all_opps' in locals() or 'sorted_opps' in locals():
-    st.markdown("### 🏆 Top 5 Edge Opportunities")
-    sorted_opps = sorted(all_opps, key=lambda x: x['profit'], reverse=True)
-    if not sorted_opps:
-        st.warning("No matches found for the Big 5 books. Try widening your timeframe.")
-    else:
-        for i, op in enumerate(sorted_opps[:5]):
-            with st.expander(f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} | {op['game']}"):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.write(f"**PROMO: {op['s_book']}**")
-                    st.info(f"Bet ${max_wager:.2f} on {op['s_team']} @ {op['s_price']}")
-                with c2:
-                    st.write(f"**HEDGE: {op['h_book']}**")
-                    st.success(f"Bet ${op['hedge']:.2f} on {op['h_team']} @ {op['h_price']}")
-                with c3:
-                    st.metric("Net Profit", f"${op['profit']:.2f}")
+        # DISPLAY RESULTS
+        if all_opps:
+            st.markdown("### 🏆 Top 5 Edge Opportunities")
+            sorted_opps = sorted(all_opps, key=lambda x: x['profit'], reverse=True)
+            for i, op in enumerate(sorted_opps[:5]):
+                with st.expander(f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} | {op['game']}"):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        st.write(f"**PROMO: {op['s_book']}**")
+                        st.info(f"Bet ${max_wager:.2f} on {op['s_team']} @ {op['s_price']}")
+                    with c2:
+                        st.write(f"**HEDGE: {op['h_book']}**")
+                        st.success(f"Bet ${op['hedge']:.2f} on {op['h_team']} @ {op['h_price']}")
+                    with c3:
+                        st.metric("Net Profit", f"${op['profit']:.2f}")
+        else:
+            st.warning("No Big 5 matches found. Tip: Check 'Full Slate' or change Source Book.")
