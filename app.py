@@ -32,7 +32,7 @@ st.markdown("""
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title("🛡️ Arbitrage Edge")
+    st.title("Arbitrage Edge")
     st.markdown("---")
     quota_placeholder = st.empty()
     st.success("Big 5 Strategy Active")
@@ -48,7 +48,7 @@ with st.form("input_panel"):
         book_map = {
             "DraftKings": ["draftkings"],
             "FanDuel": ["fanduel"],
-            "Caesars": ["williamhill_us", "caesars", "caesars_legal"], 
+            "Caesars": ["caesars"], 
             "Fanatics": ["fanatics"],
             "theScore Bet": ["thescore"]
         }
@@ -70,7 +70,7 @@ with st.form("input_panel"):
             boost_val = 0
             st.caption("Auto-optimizing for max conversion.")
 
-    run_scan = st.form_submit_button("🔥 RUN DEEP SCAN")
+    run_scan = st.form_submit_button("Calculate")
 
 # --- DATA PROCESSING ---
 if run_scan:
@@ -173,3 +173,4 @@ if run_scan:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
         else:
             st.warning(f"No results found for {source_book_display}. This usually means Caesars hasn't posted Moneyline odds for these games yet.")
+
