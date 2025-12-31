@@ -10,11 +10,12 @@ def american_to_decimal(odds):
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arbitrage Edge", layout="wide")
 
+# Simplified CSS: Removed the dark backgrounds for expanders and metrics
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
-    div[data-testid="stExpander"] { background-color: #161b22 !important; border: 1px solid #30363d !important; border-radius: 8px !important; }
-    .stMetric { background-color: #1c2128; border: 1px solid #30363d; padding: 10px; border-radius: 10px; }
+    /* Removed custom background-color for data-testid="stExpander" */
+    .stMetric { padding: 10px; border-radius: 10px; border: 1px solid #30363d; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -24,8 +25,8 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("System Monitor")
     quota_placeholder = st.empty()
-    st.info("Status: Big 5 Books Active")
-    st.caption("DK, FD, CZR, Fanatics, theScore")
+    st.info("Status: Source Books Filtered")
+    st.caption("Monitoring: FanDuel & DraftKings")
 
 # --- INPUT AREA ---
 with st.container():
@@ -33,12 +34,10 @@ with st.container():
         col1, col2 = st.columns(2)
         with col1:
             promo_type = st.selectbox("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"])
-            source_book_display = st.selectbox("Source Book", ["DraftKings", "FanDuel", "Caesars", "Fanatics", "theScore Bet"])
+            # Filtered source books per your instructions
+            source_book_display = st.selectbox("Source Book", ["DraftKings", "FanDuel"])
             
-            book_map = {
-                "DraftKings": "draftkings", "FanDuel": "fanduel", "Caesars": "caesars",
-                "Fanatics": "fanatics", "theScore Bet": "thescore"
-            }
+            book_map = {"DraftKings": "draftkings", "FanDuel": "fanduel"}
             source_book = book_map[source_book_display]
 
         with col2:
@@ -70,11 +69,11 @@ if run_scan:
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"]
         }
         
+        # Kept the API call broad to find the best hedge across all books, 
+        # while the source book is restricted to DK/FD
         BOOK_LIST = "draftkings,fanduel,caesars,fanatics,thescore"
         all_opps = []
         now = datetime.now(timezone.utc)
-        
-        # Define "Tomorrow at Midnight" for the calendar filter
         tomorrow_midnight = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
 
         with st.spinner(f"Analyzing {sport_cat}..."):
@@ -91,14 +90,10 @@ if run_scan:
                         games = res.json()
                         for game in games:
                             start_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                            
-                            # Calendar Time Filter
                             if start_time <= now: continue
                             if time_horizon == "Today & Tomorrow" and start_time > tomorrow_midnight: continue
                             
-                            source_odds = []
-                            hedge_odds = []
-                            
+                            source_odds, hedge_odds = [], []
                             for book in game['bookmakers']:
                                 for market in book['markets']:
                                     for o in market['outcomes']:
@@ -116,20 +111,25 @@ if run_scan:
                                     ds, dh = american_to_decimal(s['price']), american_to_decimal(h['price'])
                                     
                                     if promo_type == "Profit Boost (%)":
-                                        total_ret = (max_wager * (ds - 1) * (1 + (boost_val / 100))) + max_wager
+                                        # New Payout = Stake + (Profit * Boost)
+                                        boost_decimal = 1 + (boost_val / 100)
+                                        total_ret = max_wager * (1 + (ds - 1) * boost_decimal)
                                         hedge_needed = total_ret / dh
                                         profit = total_ret - (max_wager + hedge_needed)
+
                                     elif promo_type == "Bonus Bet (SNR)":
+                                        # Stake is not returned
                                         total_ret = max_wager * (ds - 1)
                                         hedge_needed = total_ret / dh
                                         profit = total_ret - hedge_needed
-                                    else: # No Sweat Max Conversion
-                                        # Max conversion logic: Assume 70% retention on the refund
-                                        refund_val = max_wager * 0.70
-                                        total_ret = max_wager * ds
-                                        # How much to hedge to lock in profit
-                                        hedge_needed = (total_ret - refund_val) / dh
-                                        profit = total_ret - (max_wager + hedge_needed)
+
+                                    else: # No-Sweat Bet
+                                        # Logic: Equalize profit for (Win) vs (Loss + Bonus Bet Refund)
+                                        # Assume 70% conversion on the refund
+                                        refund_rate = 0.70
+                                        # Formula: Hedge = (Stake * (DecimalSource + RefundRate - 1)) / (DecimalHedge + RefundRate)
+                                        hedge_needed = (max_wager * (ds + refund_rate - 1)) / (dh + refund_rate)
+                                        profit = (max_wager * ds) - (max_wager + hedge_needed)
 
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
@@ -141,11 +141,10 @@ if run_scan:
                 except: continue
 
         st.markdown("### 🏆 Top 5 Opportunities")
-        # Rank by absolute profit
         sorted_opps = sorted(all_opps, key=lambda x: x['profit'], reverse=True)
 
         if not sorted_opps:
-            st.warning("No matches found. Try selecting 'Full Slate' or a different Source Book.")
+            st.warning("No matches found.")
         else:
             for i, op in enumerate(sorted_opps[:5]):
                 header = f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} | {op['game']}"
