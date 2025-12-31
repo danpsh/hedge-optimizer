@@ -10,49 +10,48 @@ def american_to_decimal(odds):
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arbitrage Edge", layout="wide")
 
-# CLEAN UI: High-contrast cards, no dark backgrounds on results
+# CLEAN UI: Light mode with professional white cards
 st.markdown("""
     <style>
+    .main { background-color: #f8f9fa; }
     div[data-testid="stExpander"] { 
         background-color: #ffffff !important; 
         color: #000000 !important;
-        border: 1px solid #d1d5db !important; 
+        border: 1px solid #dee2e6 !important; 
         border-radius: 12px !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin-bottom: 12px !important;
     }
     .stMetric { 
-        background-color: #f3f4f6; 
-        border: 1px solid #d1d5db; 
+        background-color: #ffffff; 
+        border: 1px solid #dee2e6; 
         padding: 15px; 
         border-radius: 10px; 
     }
-    p, span, label { font-family: 'Inter', sans-serif; }
+    p, span, label { color: #1f2937; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title("Arbitrage Edge")
+    st.title("🛡️ Arbitrage Edge")
     st.markdown("---")
     quota_placeholder = st.empty()
-    st.success("Big 5 Strategy Active")
+    st.info("Source Books: FanDuel, DraftKings")
 
 # --- USER INPUT ---
 with st.form("input_panel"):
     col1, col2 = st.columns(2)
     with col1:
         promo_type = st.selectbox("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"])
-        source_book_display = st.selectbox("Source Book", ["DraftKings", "FanDuel", "Caesars", "Fanatics", "theScore Bet"])
+        # Kept only the requested Source Books
+        source_book_display = st.selectbox("Source Book", ["FanDuel", "DraftKings"])
         
-        # Comprehensive key mapping for Caesars
         book_map = {
-            "DraftKings": ["draftkings"],
-            "FanDuel": ["fanduel"],
-            "Caesars": ["caesars"], 
-            "Fanatics": ["fanatics"],
-            "theScore Bet": ["thescore"]
+            "DraftKings": "draftkings",
+            "FanDuel": "fanduel"
         }
-        source_keys = book_map[source_book_display]
+        source_key = book_map[source_book_display]
 
     with col2:
         sport_cat = st.selectbox("Sport", ["All Sports", "NBA", "NFL", "NHL", "NCAAB"])
@@ -68,15 +67,15 @@ with st.form("input_panel"):
             boost_val = st.number_input("Boost (%)", min_value=1, value=50)
         else:
             boost_val = 0
-            st.caption("Auto-optimizing for max conversion.")
+            st.caption("Optimizing for max conversion.")
 
-    run_scan = st.form_submit_button("Calculate")
+    run_scan = st.form_submit_button("🔥 RUN DEEP SCAN")
 
 # --- DATA PROCESSING ---
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
-        st.error("Missing API Key in Secrets!")
+        st.error("Missing API Key!")
     else:
         sport_map = {
             "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab"],
@@ -87,9 +86,8 @@ if run_scan:
         now = datetime.now(timezone.utc)
         tomorrow_midnight = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
 
-        with st.spinner(f"Scanning for {source_book_display} matches..."):
+        with st.spinner(f"Scanning for {source_book_display} edges..."):
             for sport_key in sport_map[sport_cat]:
-                # Pull odds for all US books to ensure we find a hedge
                 url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
                 
@@ -108,20 +106,18 @@ if run_scan:
                             source_outcomes = []
                             other_outcomes = []
                             
-                            # Sort books into Source and Potential Hedges
                             for book in game['bookmakers']:
-                                if book['key'] in source_keys:
+                                if book['key'] == source_key:
                                     for market in book['markets']:
                                         if market['key'] == 'h2h':
                                             source_outcomes = market['outcomes']
                                 else:
-                                    # Collect hedge from ANY other book for better results
+                                    # Collect hedge odds from ALL other available books
                                     for market in book['markets']:
                                         if market['key'] == 'h2h':
                                             for o in market['outcomes']:
                                                 other_outcomes.append({'book': book['title'], 'name': o['name'], 'price': o['price']})
 
-                            # If we found your source book for this game, run the math
                             if source_outcomes:
                                 for s_opt in source_outcomes:
                                     opp_team = [t for t in [game['home_team'], game['away_team']] if t != s_opt['name']][0]
@@ -156,10 +152,10 @@ if run_scan:
 
         if all_opps:
             st.markdown("### 🏆 Top 5 Opportunities")
-            # Filter out duplicates and sort
             sorted_opps = sorted(all_opps, key=lambda x: x['profit'], reverse=True)
             for i, op in enumerate(sorted_opps[:5]):
-                with st.expander(f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} | {op['game']}"):
+                header = f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} | {op['game']}"
+                with st.expander(header):
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.write(f"**PROMO: {op['s_book']}**")
@@ -172,5 +168,4 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
         else:
-            st.warning(f"No results found for {source_book_display}. This usually means Caesars hasn't posted Moneyline odds for these games yet.")
-
+            st.warning("No matches found. Try widening your Time Horizon.")
