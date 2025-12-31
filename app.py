@@ -35,6 +35,7 @@ with st.container():
         col1, col2 = st.columns(2)
         with col1:
             promo_type = st.selectbox("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"])
+            # Restricted to FD and DK only
             source_book_display = st.selectbox("Source Book", ["DraftKings", "FanDuel"])
             source_book = "draftkings" if source_book_display == "DraftKings" else "fanduel"
 
@@ -60,12 +61,12 @@ if run_scan:
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"]
         }
         
-        # We search FD/DK for source, and others for the best hedge
+        # Source is FD/DK, but we search others for the best hedge price
         BOOK_LIST = "draftkings,fanduel,caesars,fanatics,thescore"
         all_opps = []
         now = datetime.now(timezone.utc)
 
-        with st.spinner(f"Scanning for {promo_type}..."):
+        with st.spinner(f"Scanning for future {sport_cat} games..."):
             for sport in sport_map[sport_cat]:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST}
@@ -77,6 +78,11 @@ if run_scan:
                     if res.status_code == 200:
                         games = res.json()
                         for game in games:
+                            # --- TIME FILTER: ONLY GAMES THAT HAVEN'T STARTED ---
+                            commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                            if commence_time <= now:
+                                continue # Skip live or past games
+
                             source_odds, hedge_odds = [], []
                             for book in game['bookmakers']:
                                 for market in book['markets']:
@@ -87,49 +93,49 @@ if run_scan:
 
                             for s in source_odds:
                                 opp_team = [t for t in [game['home_team'], game['away_team']] if t != s['team']][0]
+                                # Find best hedge price available across all other books
                                 best_h = max([h for h in hedge_odds if h['team'] == opp_team], key=lambda x: x['price'], default=None)
                                 
                                 if best_h:
                                     ds, dh = american_to_decimal(s['price']), american_to_decimal(best_h['price'])
                                     
                                     if promo_type == "Profit Boost (%)":
-                                        # New boosted decimal odds
                                         boosted_ds = 1 + ((ds - 1) * (1 + boost_val/100))
-                                        # Hedge to equalize profit: Hedge = (Wager * BoostedDecimal) / HedgeDecimal
+                                        # Arb formula to equalize profit
                                         hedge_needed = (max_wager * boosted_ds) / dh
                                         profit = (max_wager * boosted_ds) - (max_wager + hedge_needed)
-                                        rating = profit # Rank by $ profit
+                                        rating = profit 
 
                                     elif promo_type == "Bonus Bet (SNR)":
-                                        # SNR = Stake not returned. Payout = Wager * (Decimal - 1)
                                         hedge_needed = (max_wager * (ds - 1)) / dh
                                         profit = (max_wager * (ds - 1)) - hedge_needed
-                                        rating = (profit / max_wager) * 100 # Rank by conversion %
+                                        rating = (profit / max_wager) * 100 
 
-                                    else: # No-Sweat Bet
-                                        # Conversion logic: Assume 70% retention on bonus refund
+                                    else: # No-Sweat Bet (Conversion focused)
                                         refund_conversion = 0.70
-                                        # Formula for optimal hedge on No-Sweat:
+                                        # Optimal hedge for Risk-Free conversion
                                         hedge_needed = (max_wager * (ds - refund_conversion)) / (dh + refund_conversion)
                                         profit = (max_wager * ds) - (max_wager + hedge_needed)
                                         rating = (profit / max_wager) * 100
 
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
+                                        "start": commence_time.strftime("%m/%d %I:%M %p"),
                                         "profit": profit, "hedge": hedge_needed, "rating": rating,
                                         "s_team": s['team'], "s_book": s['book'], "s_price": format_odds(ds),
                                         "h_team": best_h['team'], "h_book": best_h['book'], "h_price": format_odds(dh)
                                     })
                 except: continue
 
-        st.markdown("### 🏆 Top Opportunities")
+        st.markdown("### 🏆 Top Opportunities (Future Games Only)")
+        # Sort by rating (Profit $ for Boost, Conversion % for others)
         sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
 
         if not sorted_opps:
-            st.warning("No matches found.")
+            st.warning("No future matches found. The games might have already started.")
         else:
             for i, op in enumerate(sorted_opps[:5]):
-                with st.expander(f"RANK {i+1} | ${op['profit']:.2f} Profit | {op['game']}"):
+                with st.expander(f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} Profit | {op['game']}"):
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.write(f"**PROMO: {op['s_book']}**")
