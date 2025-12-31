@@ -10,6 +10,7 @@ def american_to_decimal(odds):
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arbitrage Edge", layout="wide")
 
+# CLEAN UI STYLING: High-contrast white cards, no dark backgrounds
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
@@ -18,6 +19,7 @@ st.markdown("""
         border: 1px solid #dee2e6 !important; 
         border-radius: 12px !important;
         margin-bottom: 12px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     div[data-testid="stMetric"] {
         background-color: #ffffff;
@@ -29,7 +31,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- TOP ROW: API COUNTER ---
+# --- TOP ROW: API COUNTER (GAS GAUGE) ---
 if 'remaining_requests' not in st.session_state:
     st.session_state.remaining_requests = "---"
 
@@ -46,6 +48,7 @@ with st.form("input_panel"):
         promo_type = st.selectbox("Strategy", ["No-Sweat Bet", "Profit Boost (%)", "Bonus Bet (SNR)"])
         source_book_display = st.selectbox("Source Book", ["FanDuel", "DraftKings"])
         
+        # Book Key Mapping
         book_map = {
             "DraftKings": "draftkings",
             "FanDuel": "fanduel",
@@ -65,31 +68,35 @@ with st.form("input_panel"):
     with c1:
         max_wager = st.number_input("Max Wager ($)", min_value=1.0, value=50.0)
     with c2:
+        # DYNAMIC UI: Only shows if Profit Boost is selected
         if promo_type == "Profit Boost (%)":
             boost_val = st.number_input("Boost (%)", min_value=1, value=50)
         else:
             boost_val = 0
             st.info("💡 Strategy: Max Conversion Mode")
 
-    run_scan = st.form_submit_button("🔥 RUN DEEP SCAN")
+    run_scan = st.form_submit_button("Find Max Value")
 
-# --- LOGIC ---
+# --- DATA PROCESSING ---
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
-        st.error("API Key not found in Secrets.")
+        st.error("API Key not found in Streamlit Secrets.")
     else:
         sport_map = {
             "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab"],
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"]
         }
         
+        # Strictly limited to your requested 5 books for both sides
         ALLOWED_HEDGE_KEYS = ["draftkings", "fanduel", "williamhill_us", "caesars", "fanatics", "thescore"]
+        
         all_opps = []
-        now = datetime.now(timezone.utc)
-        tomorrow_midnight = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
+        now_utc = datetime.now(timezone.utc)
+        cst_offset = timedelta(hours=-6) # CST Adjustment
+        tomorrow_midnight_utc = (now_utc + timedelta(days=1)).replace(hour=23, minute=59, second=59)
 
-        with st.spinner("Searching markets..."):
+        with st.spinner("Analyzing Markets..."):
             for sport_key in sport_map[sport_cat]:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
@@ -101,17 +108,23 @@ if run_scan:
                     if res.status_code == 200:
                         data = res.json()
                         for game in data:
-                            start_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                            if start_time <= now: continue
-                            if time_horizon == "Today & Tomorrow" and start_time > tomorrow_midnight: continue
+                            # 1. TIMEZONE & FILTERING BLOCK
+                            start_time_utc = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                            if start_time_utc <= now_utc: continue
+                            if time_horizon == "Today & Tomorrow" and start_time_utc > tomorrow_midnight_utc: continue
+                            
+                            start_time_cst = start_time_utc + cst_offset
                             
                             source_outcomes = []
                             hedge_outcomes = []
                             
                             for book in game['bookmakers']:
+                                # Identify Source Book Odds
                                 if book['key'] == source_key:
                                     for market in book['markets']:
                                         if market['key'] == 'h2h': source_outcomes = market['outcomes']
+                                
+                                # Identify Hedge Odds (MUST be in Big 5)
                                 elif book['key'] in ALLOWED_HEDGE_KEYS:
                                     for market in book['markets']:
                                         if market['key'] == 'h2h':
@@ -121,12 +134,15 @@ if run_scan:
                             if source_outcomes and hedge_outcomes:
                                 for s_opt in source_outcomes:
                                     opp_team = [t for t in [game['home_team'], game['away_team']] if t != s_opt['name']][0]
-                                    possible_hedges = [h for h in hedge_outcomes if h['name'] == opp_team]
+                                    possible_hedges = [h in hedge_outcomes if h['name'] == opp_team]
                                     
-                                    if possible_hedges:
-                                        best_hedge = max(possible_hedges, key=lambda x: x['price'])
+                                    # Filter for best price among our allowed hedge books
+                                    valid_hedges = [h for h in hedge_outcomes if h['name'] == opp_team]
+                                    if valid_hedges:
+                                        best_hedge = max(valid_hedges, key=lambda x: x['price'])
                                         ds, dh = american_to_decimal(s_opt['price']), american_to_decimal(best_hedge['price'])
 
+                                        # Calculation Logic
                                         if promo_type == "Profit Boost (%)":
                                             total_ret = (max_wager * (ds - 1) * (1 + (boost_val / 100))) + max_wager
                                             hedge_needed = total_ret / dh
@@ -135,24 +151,24 @@ if run_scan:
                                             total_ret = max_wager * (ds - 1)
                                             hedge_needed = total_ret / dh
                                             profit = total_ret - hedge_needed
-                                        else: # No-Sweat (Conversion focus)
-                                            refund_val = max_wager * 0.70
+                                        else: # No-Sweat
+                                            refund_val = max_wager * 0.70 # Assumes 70% conversion of bonus
                                             total_ret = max_wager * ds
                                             hedge_needed = (total_ret - refund_val) / dh
                                             profit = total_ret - (max_wager + hedge_needed)
 
                                         all_opps.append({
                                             "game": f"{game['away_team']} vs {game['home_team']}",
-                                            "start": start_time.strftime("%m/%d | %I:%M %p"),
+                                            "start": start_time_cst.strftime("%m/%d | %I:%M %p CST"),
                                             "profit": profit, "hedge": hedge_needed,
                                             "s_book": source_book_display, "s_team": s_opt['name'], "s_price": s_opt['price'],
                                             "h_book": best_hedge['book'], "h_team": best_hedge['name'], "h_price": best_hedge['price']
                                         })
                 except: continue
 
-        # DISPLAY RESULTS
+        # --- DISPLAY RESULTS ---
         if all_opps:
-            st.markdown("### 🏆 Top 5 Edge Opportunities")
+            st.markdown("### 🏆 Top 5 Big 5 Matches")
             sorted_opps = sorted(all_opps, key=lambda x: x['profit'], reverse=True)
             for i, op in enumerate(sorted_opps[:5]):
                 with st.expander(f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} | {op['game']}"):
@@ -166,4 +182,4 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
         else:
-            st.warning("No Big 5 matches found. Tip: Check 'Full Slate' or change Source Book.")
+            st.warning("No Big 5 matches found. Try 'Full Slate' or switch Source Book.")
