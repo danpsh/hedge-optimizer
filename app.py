@@ -1,41 +1,46 @@
 import streamlit as st
 import requests
 
-def am_to_dec(odds):
-    if odds > 0: return (odds / 100) + 1
-    return (100 / abs(odds)) + 1
+# 1. Helper Function: Math Conversion
+def american_to_decimal(odds):
+    if odds > 0:
+        return (odds / 100) + 1
+    else:
+        return (100 / abs(odds)) + 1
 
-st.set_page_config(page_title="Hedge Auto-Pilot", layout="wide")
+# 2. Page Configuration
+st.set_page_config(page_title="Hedge Pro: Split-Book Scanner", layout="wide", page_icon="🎯")
 
-# --- 1. PROMO CONFIGURATION (The "Settings") ---
-st.sidebar.title(⚙️ Promo Settings")
-promo_type = st.sidebar.selectbox("Booster Type", ["Bonus Bet ($)", "Profit Boost (%)", "No-Sweat Bet"])
+# 3. Initialize Session State (Prevents errors when clicking buttons)
+if 'main_odds' not in st.session_state:
+    st.session_state['main_odds'] = 300
+if 'hedge_odds' not in st.session_state:
+    st.session_state['hedge_odds'] = -350
 
-if promo_type == "Profit Boost (%)":
-    boost_pct = st.sidebar.number_input("Boost %", min_value=1, value=50)
-    base_stake = st.sidebar.number_input("Bet Amount ($)", value=50.0)
-    m_stake = base_stake
-else:
-    m_stake = st.sidebar.number_input("Promo Amount ($)", value=100.0)
-    base_stake = m_stake
+# --- SIDEBAR: SETTINGS ---
+st.sidebar.title("⚙️ Promo Settings")
+promo_type = st.sidebar.selectbox("Promo Type", ["Bonus Bet (Free Bet)", "Profit Boost", "No-Sweat Bet"])
+m_stake = st.sidebar.number_input("Promo Amount ($)", value=100)
 
-round_flag = st.sidebar.toggle("Round Hedge to $1", value=True)
+# --- SECTION 1: LIVE SCANNER ---
+st.title("🎯 Multi-Book Hedge Scanner")
+st.write("Ensuring the Underdog and Favorite are on **different books** to avoid flagging.")
 
-st.title("🎯 Best Promo Hedges")
-st.write(f"Scanning **DraftKings, FanDuel, theScore, Caesars, and Fanatics** for the best {promo_type} opportunities.")
-
-# --- 2. THE AUTO-SCANNER ---
 api_key = st.secrets.get("ODDS_API_KEY", "")
 
 if not api_key:
-    st.error("Please add your ODDS_API_KEY to Streamlit Secrets.")
+    st.error("🔑 API Key Missing! Go to Streamlit Cloud Settings > Secrets and add: ODDS_API_KEY = 'your_key'")
 else:
-    sport = st.selectbox("Select Sport", ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab"])
-    
-    if st.button("🔍 Find Best Live Options"):
-        TARGETS = "draftkings,fanduel,caesars,thescore,fanatics"
+    col_a, col_b = st.columns([1, 4])
+    with col_a:
+        sport = st.selectbox("Sport", ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab"])
+        scan_btn = st.button("🔍 Find Different-Book Hedges")
+
+    if scan_btn:
+        # We only look at your specific 5 books
+        TARGET_BOOKS = "draftkings,fanduel,caesars,thescore,fanatics"
         url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
-        params = {'apiKey': api_key, 'regions': 'us', 'bookmakers': TARGETS, 'oddsFormat': 'american'}
+        params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american', 'bookmakers': TARGET_BOOKS}
         
         res = requests.get(url, params=params)
         if res.status_code == 200:
@@ -49,58 +54,75 @@ else:
                     for o in outcomes:
                         prices.append({'book': book['title'], 'team': o['name'], 'price': o['price']})
                 
-                # Check for two-book splits
+                # Compare every possible combination for this game
                 teams = list(set([p['team'] for p in prices]))
                 if len(teams) == 2:
-                    t1_odds = [p for p in prices if p['team'] == teams[0]]
-                    t2_odds = [p for p in prices if p['team'] == teams[1]]
+                    team_a_odds = [p for p in prices if p['team'] == teams[0]]
+                    team_b_odds = [p for p in prices if p['team'] == teams[1]]
                     
-                    for a in t1_odds:
-                        for b in t2_odds:
+                    for a in team_a_odds:
+                        for b in team_b_odds:
+                            # CRUCIAL: Books MUST be different
                             if a['book'] != b['book']:
                                 dog, fav = (a, b) if a['price'] > b['price'] else (b, a)
-                                if dog['price'] >= 200 and fav['price'] < 0:
-                                    # Calculate Profit based on Promo Type selected in Sidebar
-                                    dm, df = am_to_dec(dog['price']), am_to_dec(fav['price'])
-                                    
-                                    if promo_type == "Bonus Bet ($)":
-                                        payout = m_stake * (dm - 1)
-                                        raw_h = payout / df
-                                        net = payout - raw_h
-                                    elif promo_type == "Profit Boost (%)":
-                                        p_mult = 1 + (boost_pct/100)
-                                        payout = (m_stake * (dm - 1) * p_mult) + m_stake
-                                        raw_h = payout / df
-                                        net = payout - (m_stake + raw_h)
-                                    else: # No Sweat
-                                        raw_h = (m_stake * dm) / (df + 0.7)
-                                        net = (m_stake * dm) - (m_stake + raw_h)
+                                
+                                if dog['price'] >= 250 and fav['price'] < 0:
+                                    dm, dh = american_to_decimal(dog['price']), american_to_decimal(fav['price'])
+                                    # Calculate Conversion %
+                                    payout = (dm - 1) * 100
+                                    h_stake = payout / dh
+                                    conv = (payout - h_stake)
                                     
                                     opps.append({
-                                        "game": f"{game['away_team']} @ {game['home_team']}",
-                                        "dog_book": dog['book'], "dog_team": dog['team'], "dog_odds": dog['price'],
-                                        "fav_book": fav['book'], "fav_team": fav['team'], "fav_odds": fav['price'],
-                                        "h_stake": round(raw_h) if round_flag else raw_h,
-                                        "profit": net,
-                                        "conv": (net/m_stake)*100
+                                        "game": f"{teams[0]} vs {teams[1]}",
+                                        "dog_book": dog['book'], "dog_price": dog['price'],
+                                        "fav_book": fav['book'], "fav_price": fav['price'],
+                                        "conv": conv,
+                                        "u_key": f"btn_{dog['book']}_{fav['book']}_{dog['price']}_{fav['price']}".replace(" ", "_")
                                     })
 
-            # Sort by best profit
-            sorted_opps = sorted(opps, key=lambda x: x['profit'], reverse=True)
-
-            if not sorted_opps:
-                st.warning("No valid hedges found. Try a different sport.")
+            sorted_opps = sorted(opps, key=lambda x: x['conv'], reverse=True)
             
-            for op in sorted_opps[:5]:
-                with st.container(border=True):
-                    col1, col2 = st.columns([2, 1])
-                    with col1:
-                        st.markdown(f"### {op['game']}")
-                        st.write(f"🚩 **{promo_type} on:** {op['dog_book']} — {op['dog_team']} ({op['dog_odds']})")
-                        st.write(f"🛡️ **Hedge Cash on:** {op['fav_book']} — {op['fav_team']} ({op['fav_odds']})")
-                    with col2:
-                        st.metric("Hedge Amount", f"${op['h_stake']:.0f}")
-                        st.metric("Net Profit", f"${op['profit']:.2f}")
-                        st.write(f"**{op['conv']:.1f}% Conversion**")
-        else:
-            st.error("API Error. Check your key or limits.")
+            if not sorted_opps:
+                st.warning("No high-value split hedges found. Try a different sport!")
+            
+            for op in sorted_opps[:8]:
+                with st.expander(f"💰 {op['conv']:.1f}% Conversion — {op['game']}"):
+                    st.write(f"🟢 **Place PROMO on:** {op['dog_book']} at **{op['dog_price']}**")
+                    st.write(f"🔵 **Place HEDGE on:** {op['fav_book']} at **{op['fav_price']}**")
+                    if st.button("Use this Hedge", key=op['u_key']):
+                        st.session_state['main_odds'] = op['dog_price']
+                        st.session_state['hedge_odds'] = op['fav_price']
+                        st.rerun()
+
+st.markdown("---")
+
+# --- SECTION 2: CALCULATOR ---
+st.subheader("🧮 Final Math")
+c1, c2 = st.columns(2)
+
+with c1:
+    main_odds = st.number_input("Underdog Odds (Promo)", value=st.session_state['main_odds'])
+    hedge_odds = st.number_input("Favorite Odds (Cash)", value=st.session_state['hedge_odds'])
+
+# Math logic for calculation
+dm, dh = american_to_decimal(main_odds), american_to_decimal(hedge_odds)
+
+if promo_type == "Bonus Bet (Free Bet)":
+    target_win = m_stake * (dm - 1)
+    hedge_needed = target_win / dh
+    net_profit = target_win - hedge_needed
+elif promo_type == "Profit Boost":
+    target_win = m_stake * dm # Simplified for this view
+    hedge_needed = target_win / dh
+    net_profit = target_win - (m_stake + hedge_needed)
+else: # No-sweat
+    refund_val = m_stake * 0.70
+    target_win = m_stake * dm
+    hedge_needed = (target_win - refund_val) / dh
+    net_profit = target_win - (m_stake + hedge_needed)
+
+with c2:
+    st.metric("Hedge to Place", f"${hedge_needed:.2f}")
+    st.metric("Guaranteed Profit", f"${net_profit:.2f}")
+    st.progress(min(max(net_profit/m_stake, 0.0), 1.0), text=f"Conversion: {((net_profit/m_stake)*100):.1f}%")
