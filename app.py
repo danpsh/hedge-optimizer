@@ -4,24 +4,10 @@ from datetime import datetime, timezone, timedelta
 
 # --- MATH HELPERS ---
 def american_to_decimal(odds):
-    """Accurate conversion for American odds to Decimal."""
+    """Accurate conversion for American odds to Decimal for internal math."""
     if odds > 0: 
         return (odds / 100) + 1
-    # Avoid division by zero if odds are somehow 0
     return (100 / max(abs(odds), 1)) + 1
-
-def format_odds(decimal_odds):
-    """
-    Fixed conversion: Handles heavy favorites correctly to 
-    prevent extreme numbers like -9000.
-    """
-    if decimal_odds >= 2.0:
-        return f"+{int(round((decimal_odds - 1) * 100))}"
-    else:
-        # If decimal is 1.05, this becomes 100 / 0.05 = 2000 -> -2000
-        # If it's a massive favorite, we cap/round appropriately
-        val = int(round(100 / (decimal_odds - 1)))
-        return f"-{val}"
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arbitrage Edge", layout="wide")
@@ -45,7 +31,6 @@ with st.container():
         col1, col2 = st.columns(2)
         with col1:
             promo_type = st.selectbox("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"])
-            # Restricted to FD and DK per user instructions
             source_book_display = st.selectbox("Source Book", ["DraftKings", "FanDuel"])
             source_book = "draftkings" if source_book_display == "DraftKings" else "fanduel"
 
@@ -73,12 +58,12 @@ if run_scan:
         
         BOOK_LIST = "draftkings,fanduel,caesars,fanatics,thescore"
         all_opps = []
-        now = datetime.now(timezone.utc)
+        now_utc = datetime.now(timezone.utc)
 
         with st.spinner(f"Scanning for future {sport_cat} games..."):
             for sport in sport_map[sport_cat]:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
-                # We pull American odds directly from the API to avoid conversion glitches
+                # Fetching American odds directly from API
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
                 
                 try:
@@ -88,15 +73,20 @@ if run_scan:
                     if res.status_code == 200:
                         games = res.json()
                         for game in games:
-                            commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                            if commence_time <= now:
+                            # Parse UTC time
+                            commence_time_utc = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                            
+                            # Filter: Only games that haven't started
+                            if commence_time_utc <= now_utc:
                                 continue 
+                            
+                            # Convert to CST (UTC-6)
+                            cst_time = commence_time_utc - timedelta(hours=6)
 
                             source_odds, hedge_odds = [], []
                             for book in game['bookmakers']:
                                 for market in book['markets']:
                                     for o in market['outcomes']:
-                                        # API is now providing American odds directly
                                         entry = {'book': book['title'], 'key': book['key'], 'team': o['name'], 'price': o['price']}
                                         if book['key'] == source_book: source_odds.append(entry)
                                         else: hedge_odds.append(entry)
@@ -106,7 +96,6 @@ if run_scan:
                                 best_h = max([h for h in hedge_odds if h['team'] == opp_team], key=lambda x: x['price'], default=None)
                                 
                                 if best_h:
-                                    # Convert to decimal ONLY for the internal math
                                     ds, dh = american_to_decimal(s['price']), american_to_decimal(best_h['price'])
                                     
                                     if promo_type == "Profit Boost (%)":
@@ -122,18 +111,17 @@ if run_scan:
                                         rating = (profit / max_wager) * 100 
 
                                     else: # No-Sweat Bet
-                                        refund_val = 0.70 
-                                        hedge_needed = (max_wager * (ds - refund_val)) / (dh + refund_val)
+                                        refund_conversion = 0.70 
+                                        hedge_needed = (max_wager * (ds - refund_conversion)) / (dh + refund_conversion)
                                         profit = (max_wager * ds) - (max_wager + hedge_needed)
                                         rating = (profit / max_wager) * 100
 
-                                    # Only show results with realistic profit/conversion
                                     if rating > 0: 
                                         all_opps.append({
                                             "game": f"{game['away_team']} vs {game['home_team']}",
-                                            "start": commence_time.strftime("%m/%d %I:%M %p"),
+                                            "start_cst": cst_time.strftime("%m/%d %I:%M %p CST"),
                                             "profit": profit, "hedge": hedge_needed, "rating": rating,
-                                            "s_team": s['team'], "s_book": s['book'], "s_price": s['price'], # Keep raw American
+                                            "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
                                             "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price']
                                         })
                 except: continue
@@ -145,11 +133,11 @@ if run_scan:
             st.warning("No profitable future matches found.")
         else:
             for i, op in enumerate(sorted_opps[:5]):
-                with st.expander(f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} Profit | {op['game']}"):
+                with st.expander(f"RANK {i+1} | {op['start_cst']} | ${op['profit']:.2f} Profit"):
+                    st.write(f"**{op['game']}**")
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.write(f"**PROMO: {op['s_book']}**")
-                        # Displaying as simple +200/-300 strings
                         s_prefix = "+" if op['s_price'] > 0 else ""
                         st.info(f"Bet **${max_wager:.2f}** on {op['s_team']} @ **{s_prefix}{op['s_price']}**")
                     with c2:
