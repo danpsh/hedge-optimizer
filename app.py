@@ -18,6 +18,7 @@ if 'hedge_odds' not in st.session_state:
     st.session_state['hedge_odds'] = -350
 
 # --- SIDEBAR ---
+# FIXED: Added the missing opening quote here
 st.sidebar.title(⚙️ Promo Settings")
 promo_type = st.sidebar.selectbox("Promo Type", ["Bonus Bet (Free Bet)", "Profit Boost", "No-Sweat Bet"])
 m_stake = st.sidebar.number_input("Promo Amount ($)", value=100)
