@@ -10,7 +10,6 @@ def american_to_decimal(odds):
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arbitrage Edge", layout="wide")
 
-# Institutional Styling (Dark Theme)
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -19,16 +18,16 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR: SYSTEM MONITOR ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.title("🛡️ Arbitrage Edge")
     st.markdown("---")
     st.subheader("System Monitor")
     quota_placeholder = st.empty()
-    st.info("Status: Connected to Big 5 Books")
-    st.caption("Books: DK, FD, CZR, Fanatics, theScore")
+    st.info("Status: Big 5 Books Active")
+    st.caption("DK, FD, CZR, Fanatics, theScore")
 
-# --- USER INPUT AREA ---
+# --- INPUT AREA ---
 with st.container():
     with st.form("input_panel"):
         col1, col2 = st.columns(2)
@@ -44,9 +43,9 @@ with st.container():
 
         with col2:
             sport_cat = st.selectbox("Sport", ["All Sports", "NBA", "NFL", "NHL", "NCAAB"])
-            time_horizon = st.radio("Time Horizon", ["Next 48 Hours", "Full Slate"], horizontal=True)
+            time_horizon = st.radio("Time Horizon", ["Today & Tomorrow", "Full Slate"], horizontal=True)
             
-        st.divider() # Replaced "Control Center" title with a clean line
+        st.divider()
         
         c1, c2 = st.columns(2)
         with c1:
@@ -56,15 +55,15 @@ with st.container():
                 boost_val = st.number_input("Boost (%)", min_value=1, value=50)
             else:
                 boost_val = 0
-                st.write("Optimized for max conversion.")
+                st.write("Optimizing for maximum conversion.")
 
         run_scan = st.form_submit_button("🔥 RUN GLOBAL SCAN")
 
-# --- DATA PROCESSING ---
+# --- DATA & LOGIC ---
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
-        st.error("Missing API Key in Streamlit Secrets!")
+        st.error("Missing API Key!")
     else:
         sport_map = {
             "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab"],
@@ -74,8 +73,11 @@ if run_scan:
         BOOK_LIST = "draftkings,fanduel,caesars,fanatics,thescore"
         all_opps = []
         now = datetime.now(timezone.utc)
+        
+        # Define "Tomorrow at Midnight" for the calendar filter
+        tomorrow_midnight = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
 
-        with st.spinner(f"Scanning for edges..."):
+        with st.spinner(f"Analyzing {sport_cat}..."):
             for sport in sport_map[sport_cat]:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST}
@@ -89,8 +91,10 @@ if run_scan:
                         games = res.json()
                         for game in games:
                             start_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                            
+                            # Calendar Time Filter
                             if start_time <= now: continue
-                            if time_horizon == "Next 48 Hours" and start_time > (now + timedelta(hours=48)): continue
+                            if time_horizon == "Today & Tomorrow" and start_time > tomorrow_midnight: continue
                             
                             source_odds = []
                             hedge_odds = []
@@ -119,9 +123,11 @@ if run_scan:
                                         total_ret = max_wager * (ds - 1)
                                         hedge_needed = total_ret / dh
                                         profit = total_ret - hedge_needed
-                                    else: # No Sweat
+                                    else: # No Sweat Max Conversion
+                                        # Max conversion logic: Assume 70% retention on the refund
                                         refund_val = max_wager * 0.70
                                         total_ret = max_wager * ds
+                                        # How much to hedge to lock in profit
                                         hedge_needed = (total_ret - refund_val) / dh
                                         profit = total_ret - (max_wager + hedge_needed)
 
@@ -135,17 +141,18 @@ if run_scan:
                 except: continue
 
         st.markdown("### 🏆 Top 5 Opportunities")
+        # Rank by absolute profit
         sorted_opps = sorted(all_opps, key=lambda x: x['profit'], reverse=True)
 
         if not sorted_opps:
-            st.warning("No matches found for this book/timeframe.")
+            st.warning("No matches found. Try selecting 'Full Slate' or a different Source Book.")
         else:
             for i, op in enumerate(sorted_opps[:5]):
-                header = f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} PROFIT | {op['game']}"
+                header = f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} | {op['game']}"
                 with st.expander(header):
                     c1, c2, c3 = st.columns(3)
                     with c1:
-                        st.write(f"**SOURCE: {op['s_book']}**")
+                        st.write(f"**PROMO: {op['s_book']}**")
                         st.info(f"Bet ${max_wager:.2f} on {op['s_team']} @ {op['s_price']}")
                     with c2:
                         st.write(f"**HEDGE: {op['h_book']}**")
