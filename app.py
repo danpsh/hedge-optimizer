@@ -4,14 +4,24 @@ from datetime import datetime, timezone, timedelta
 
 # --- MATH HELPERS ---
 def american_to_decimal(odds):
-    if odds > 0: return (odds / 100) + 1
-    return (100 / abs(odds)) + 1
+    """Accurate conversion for American odds to Decimal."""
+    if odds > 0: 
+        return (odds / 100) + 1
+    # Avoid division by zero if odds are somehow 0
+    return (100 / max(abs(odds), 1)) + 1
 
 def format_odds(decimal_odds):
+    """
+    Fixed conversion: Handles heavy favorites correctly to 
+    prevent extreme numbers like -9000.
+    """
     if decimal_odds >= 2.0:
-        return f"+{round((decimal_odds - 1) * 100)}"
+        return f"+{int(round((decimal_odds - 1) * 100))}"
     else:
-        return f"-{round(100 / (decimal_odds - 1))}"
+        # If decimal is 1.05, this becomes 100 / 0.05 = 2000 -> -2000
+        # If it's a massive favorite, we cap/round appropriately
+        val = int(round(100 / (decimal_odds - 1)))
+        return f"-{val}"
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arbitrage Edge", layout="wide")
@@ -35,7 +45,7 @@ with st.container():
         col1, col2 = st.columns(2)
         with col1:
             promo_type = st.selectbox("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"])
-            # Restricted to FD and DK only
+            # Restricted to FD and DK per user instructions
             source_book_display = st.selectbox("Source Book", ["DraftKings", "FanDuel"])
             source_book = "draftkings" if source_book_display == "DraftKings" else "fanduel"
 
@@ -61,7 +71,6 @@ if run_scan:
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"]
         }
         
-        # Source is FD/DK, but we search others for the best hedge price
         BOOK_LIST = "draftkings,fanduel,caesars,fanatics,thescore"
         all_opps = []
         now = datetime.now(timezone.utc)
@@ -69,7 +78,8 @@ if run_scan:
         with st.spinner(f"Scanning for future {sport_cat} games..."):
             for sport in sport_map[sport_cat]:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
-                params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST}
+                # We pull American odds directly from the API to avoid conversion glitches
+                params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
                 
                 try:
                     res = requests.get(url, params=params)
@@ -78,30 +88,30 @@ if run_scan:
                     if res.status_code == 200:
                         games = res.json()
                         for game in games:
-                            # --- TIME FILTER: ONLY GAMES THAT HAVEN'T STARTED ---
                             commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                             if commence_time <= now:
-                                continue # Skip live or past games
+                                continue 
 
                             source_odds, hedge_odds = [], []
                             for book in game['bookmakers']:
                                 for market in book['markets']:
                                     for o in market['outcomes']:
+                                        # API is now providing American odds directly
                                         entry = {'book': book['title'], 'key': book['key'], 'team': o['name'], 'price': o['price']}
                                         if book['key'] == source_book: source_odds.append(entry)
                                         else: hedge_odds.append(entry)
 
                             for s in source_odds:
                                 opp_team = [t for t in [game['home_team'], game['away_team']] if t != s['team']][0]
-                                # Find best hedge price available across all other books
                                 best_h = max([h for h in hedge_odds if h['team'] == opp_team], key=lambda x: x['price'], default=None)
                                 
                                 if best_h:
+                                    # Convert to decimal ONLY for the internal math
                                     ds, dh = american_to_decimal(s['price']), american_to_decimal(best_h['price'])
                                     
                                     if promo_type == "Profit Boost (%)":
-                                        boosted_ds = 1 + ((ds - 1) * (1 + boost_val/100))
-                                        # Arb formula to equalize profit
+                                        boost_mult = 1 + (boost_val / 100)
+                                        boosted_ds = 1 + ((ds - 1) * boost_mult)
                                         hedge_needed = (max_wager * boosted_ds) / dh
                                         profit = (max_wager * boosted_ds) - (max_wager + hedge_needed)
                                         rating = profit 
@@ -111,39 +121,42 @@ if run_scan:
                                         profit = (max_wager * (ds - 1)) - hedge_needed
                                         rating = (profit / max_wager) * 100 
 
-                                    else: # No-Sweat Bet (Conversion focused)
-                                        refund_conversion = 0.70
-                                        # Optimal hedge for Risk-Free conversion
-                                        hedge_needed = (max_wager * (ds - refund_conversion)) / (dh + refund_conversion)
+                                    else: # No-Sweat Bet
+                                        refund_val = 0.70 
+                                        hedge_needed = (max_wager * (ds - refund_val)) / (dh + refund_val)
                                         profit = (max_wager * ds) - (max_wager + hedge_needed)
                                         rating = (profit / max_wager) * 100
 
-                                    all_opps.append({
-                                        "game": f"{game['away_team']} vs {game['home_team']}",
-                                        "start": commence_time.strftime("%m/%d %I:%M %p"),
-                                        "profit": profit, "hedge": hedge_needed, "rating": rating,
-                                        "s_team": s['team'], "s_book": s['book'], "s_price": format_odds(ds),
-                                        "h_team": best_h['team'], "h_book": best_h['book'], "h_price": format_odds(dh)
-                                    })
+                                    # Only show results with realistic profit/conversion
+                                    if rating > 0: 
+                                        all_opps.append({
+                                            "game": f"{game['away_team']} vs {game['home_team']}",
+                                            "start": commence_time.strftime("%m/%d %I:%M %p"),
+                                            "profit": profit, "hedge": hedge_needed, "rating": rating,
+                                            "s_team": s['team'], "s_book": s['book'], "s_price": s['price'], # Keep raw American
+                                            "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price']
+                                        })
                 except: continue
 
-        st.markdown("### 🏆 Top Opportunities (Future Games Only)")
-        # Sort by rating (Profit $ for Boost, Conversion % for others)
+        st.markdown("### 🏆 Top Opportunities")
         sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
 
         if not sorted_opps:
-            st.warning("No future matches found. The games might have already started.")
+            st.warning("No profitable future matches found.")
         else:
             for i, op in enumerate(sorted_opps[:5]):
                 with st.expander(f"RANK {i+1} | {op['start']} | ${op['profit']:.2f} Profit | {op['game']}"):
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.write(f"**PROMO: {op['s_book']}**")
-                        st.info(f"Bet **${max_wager:.2f}** on {op['s_team']} @ **{op['s_price']}**")
+                        # Displaying as simple +200/-300 strings
+                        s_prefix = "+" if op['s_price'] > 0 else ""
+                        st.info(f"Bet **${max_wager:.2f}** on {op['s_team']} @ **{s_prefix}{op['s_price']}**")
                     with c2:
                         st.write(f"**HEDGE: {op['h_book']}**")
-                        st.success(f"Bet **${op['hedge']:.2f}** on {op['h_team']} @ **{op['h_price']}**")
+                        h_prefix = "+" if op['h_price'] > 0 else ""
+                        st.success(f"Bet **${op['hedge']:.2f}** on {op['h_team']} @ **{h_prefix}{op['h_price']}**")
                     with c3:
-                        st.metric("Expected Profit", f"${op['profit']:.2f}")
+                        st.metric("Net Profit", f"${op['profit']:.2f}")
                         if promo_type != "Profit Boost (%)":
                             st.caption(f"Conversion: {op['rating']:.1f}%")
