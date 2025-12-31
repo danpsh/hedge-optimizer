@@ -9,7 +9,7 @@ def american_to_decimal(odds):
         return (100 / abs(odds)) + 1
 
 # 2. Page Configuration
-st.set_page_config(page_title="Hedge Pro Scanner", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="Hedge Pro Scanner", layout="wide")
 
 # 3. Initialize Session State
 if 'main_odds' not in st.session_state:
@@ -18,25 +18,24 @@ if 'hedge_odds' not in st.session_state:
     st.session_state['hedge_odds'] = -350
 
 # --- SIDEBAR ---
-# FIXED: Added the missing opening quote here
-st.sidebar.title(⚙️ Promo Settings")
+st.sidebar.title("Promo Settings")
 promo_type = st.sidebar.selectbox("Promo Type", ["Bonus Bet (Free Bet)", "Profit Boost", "No-Sweat Bet"])
 m_stake = st.sidebar.number_input("Promo Amount ($)", value=100)
 round_bet = st.sidebar.checkbox("Round Hedge to nearest $5", value=True)
 
 # --- SECTION 1: SCANNER ---
-st.title("🎯 Multi-Book Hedge Scanner")
-st.write("Finding the best Underdog and Favorite on **different books**.")
+st.title("Multi-Book Hedge Scanner")
+st.write("Finding the best Underdog and Favorite on different books.")
 
 api_key = st.secrets.get("ODDS_API_KEY", "")
 
 if not api_key:
-    st.error("🔑 API Key Missing! Go to Settings > Secrets and add: ODDS_API_KEY = 'your_key'")
+    st.error("API Key Missing! Add ODDS_API_KEY to your Streamlit Secrets.")
 else:
     col_a, col_b = st.columns([1, 4])
     with col_a:
         sport = st.selectbox("Sport", ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab"])
-        scan_btn = st.button("🔍 Find Different-Book Hedges")
+        scan_btn = st.button("Find Different-Book Hedges")
 
     if scan_btn:
         TARGET_BOOKS = "draftkings,fanduel,caesars,thescore,fanatics"
@@ -80,9 +79,9 @@ else:
 
             sorted_opps = sorted(opps, key=lambda x: x['conv'], reverse=True)
             for op in sorted_opps[:8]:
-                with st.expander(f"💰 {op['conv']:.1f}% Conversion — {op['game']}"):
-                    st.write(f"🟢 **Promo on:** {op['dog_book']} ({op['dog_price']})")
-                    st.write(f"🔵 **Hedge on:** {op['fav_book']} ({op['fav_price']})")
+                with st.expander(f"{op['conv']:.1f}% Conversion - {op['game']}"):
+                    st.write(f"PROMO ON: {op['dog_book']} ({op['dog_price']})")
+                    st.write(f"HEDGE ON: {op['fav_book']} ({op['fav_price']})")
                     if st.button("Use this Hedge", key=op['u_key']):
                         st.session_state['main_odds'] = op['dog_price']
                         st.session_state['hedge_odds'] = op['fav_price']
@@ -91,7 +90,7 @@ else:
 st.markdown("---")
 
 # --- SECTION 2: CALCULATOR ---
-st.subheader("🧮 Final Math")
+st.subheader("Final Calculation")
 c1, c2 = st.columns(2)
 
 with c1:
@@ -122,4 +121,4 @@ else:
 with c2:
     st.metric("Hedge to Place", f"${hedge_needed:.0f}" if round_bet else f"${hedge_needed:.2f}")
     st.metric("Guaranteed Profit", f"${net_profit:.2f}")
-    st.progress(min(max(net_profit/m_stake, 0.0), 1.0), text=f"Conversion: {((net_profit/m_stake)*100):.1f}%")
+    st.write(f"Conversion: {((net_profit/m_stake)*100):.1f}%")
