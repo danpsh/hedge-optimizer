@@ -24,8 +24,14 @@ with st.container():
         col1, col2 = st.columns(2)
         with col1:
             promo_type = st.selectbox("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"])
-            source_book_display = st.selectbox("Source Book", ["DraftKings", "FanDuel"])
-            source_book = "draftkings" if source_book_display == "DraftKings" else "fanduel"
+            
+            # Horizontal radio buttons for quick selection
+            source_book_display = st.radio(
+                "Source Book", 
+                ["DraftKings", "FanDuel"], 
+                horizontal=True
+            )
+            source_book = source_book_display.lower()
 
         with col2:
             sport_cat = st.selectbox("Sport", ["All Sports", "NBA", "NFL", "NHL", "NCAAB"])
@@ -146,4 +152,5 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.caption(f"Rating/Conversion: {op['rating']:.1f}%")
+
 
