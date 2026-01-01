@@ -18,17 +18,6 @@ with st.sidebar:
     st.info("Source: FD & DK Only")
     quota_placeholder = st.empty()
 
-# --- UPDATE THE SPORT MAP IN THE LOGIC SECTION ---
-# Make sure to replace your existing sport_map with this one:
-sport_map = {
-    "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab", "americanfootball_ncaaf"],
-    "NBA": ["basketball_nba"], 
-    "NFL": ["americanfootball_nfl"], 
-    "NHL": ["icehockey_nhl"], 
-    "NCAAB": ["basketball_ncaab"],
-    "NCAAF": ["americanfootball_ncaaf"]
-
-
 # --- INPUT AREA ---
 with st.container():
     with st.form("input_panel"):
@@ -67,17 +56,20 @@ with st.container():
 
         run_scan = st.form_submit_button("Calculate")
 
-
-
 # --- DATA & LOGIC ---
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
         st.error("Missing API Key! Please add ODDS_API_KEY to your secrets.")
     else:
+        # Fixed: Added NCAAF and ensured map matches the Radio labels exactly
         sport_map = {
-            "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab"],
-            "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"]
+            "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab", "americanfootball_ncaaf"],
+            "NBA": ["basketball_nba"], 
+            "NFL": ["americanfootball_nfl"], 
+            "NHL": ["icehockey_nhl"], 
+            "NCAAB": ["basketball_ncaab"],
+            "NCAAF": ["americanfootball_ncaaf"]
         }
         
         BOOK_LIST = "draftkings,fanduel,caesars,fanatics,espnbet"
@@ -85,7 +77,10 @@ if run_scan:
         now_utc = datetime.now(timezone.utc)
 
         with st.spinner(f"Scanning {sport_cat}..."):
-            for sport in sport_map[sport_cat]:
+            # Get list of keys to scan based on selection
+            sports_to_scan = sport_map.get(sport_cat, [])
+            
+            for sport in sports_to_scan:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
                 
@@ -117,30 +112,24 @@ if run_scan:
                                     s_price = s['price']
                                     h_price = best_h['price']
 
-                                    # --- MATH USING AMERICAN ODDS DIRECTLY ---
-                                    # Calculate Multipliers (Profit per $1 wagered)
+                                    # Multipliers (Profit per $1)
                                     s_mult = (s_price / 100) if s_price > 0 else (100 / abs(s_price))
                                     h_mult = (h_price / 100) if h_price > 0 else (100 / abs(h_price))
 
                                     if promo_type == "Profit Boost (%)":
                                         boost_factor = 1 + (boost_val / 100)
                                         boosted_s_mult = s_mult * boost_factor
-                                        # Hedge to equalize profit: W1 * (1 + S_boosted) / (1 + H)
                                         hedge_needed = (max_wager * (1 + boosted_s_mult)) / (1 + h_mult)
                                         profit = (max_wager * boosted_s_mult) - hedge_needed
                                         rating = profit
 
                                     elif promo_type == "Bonus Bet (SNR)":
-                                        # Profit = Winnings only (Stake not returned)
-                                        # Hedge = Winnings / (1 + H_mult)
                                         hedge_needed = (max_wager * s_mult) / (1 + h_mult)
                                         profit = (max_wager * s_mult) - hedge_needed
                                         rating = (profit / max_wager) * 100
 
                                     else: # No-Sweat Bet
-                                        # Assumes 70% conversion of the returned bonus bet
                                         ref_conv = 0.70
-                                        # Hedge = W1 * (S_mult + 1 - Ref) / (H_mult + 1 + Ref)
                                         hedge_needed = (max_wager * (s_mult + 1 - ref_conv)) / (h_mult + 1 + ref_conv)
                                         profit = (max_wager * s_mult) - (hedge_needed + (max_wager * (1 - ref_conv)))
                                         rating = (profit / max_wager) * 100
@@ -153,7 +142,7 @@ if run_scan:
                                             "s_team": s['team'], "s_book": s['book'], "s_price": s_price,
                                             "h_team": best_h['team'], "h_book": best_h['book'], "h_price": h_price
                                         })
-                except Exception as e:
+                except:
                     continue
 
         st.markdown("### 🏆 Top Opportunities")
@@ -177,9 +166,3 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.caption(f"Rating/Conversion: {op['rating']:.1f}%")
-
-
-
-
-
-
