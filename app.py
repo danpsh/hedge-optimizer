@@ -49,7 +49,7 @@ if run_scan:
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"]
         }
         
-        BOOK_LIST = "draftkings,fanduel,caesars,fanatics,betmgm,betrivers"
+        BOOK_LIST = "draftkings,fanduel,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
 
@@ -146,3 +146,4 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.caption(f"Rating/Conversion: {op['rating']:.1f}%")
+
