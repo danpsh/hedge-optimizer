@@ -8,7 +8,10 @@ st.set_page_config(page_title="Arbitrage Edge", layout="wide")
 # --- LIGHT TECH THEME (White Background) ---
 st.markdown("""
     <style>
+    /* Main Background */
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
+    
+    /* Clean White Cards */
     div[data-testid="stExpander"] {
         background-color: #ffffff;
         border: 1px solid #d1d5db;
@@ -20,17 +23,23 @@ st.markdown("""
         border: 1px solid #00ff88;
         box-shadow: 0 4px 12px rgba(0, 255, 136, 0.15);
     }
+
+    /* Metric Styling */
     [data-testid="stMetricValue"] { 
         color: #008f51 !important; 
         font-family: 'Courier New', monospace; 
         font-weight: 800;
     }
+    
+    /* Input Containers */
     div.row-widget.stRadio > div {
         background-color: #ffffff;
         padding: 12px;
         border-radius: 10px;
         border: 1px solid #e5e7eb;
     }
+
+    /* Stealth EXECUTE Button */
     .stButton>button {
         background-color: #1e1e1e;
         color: #00ff88;
@@ -43,11 +52,12 @@ st.markdown("""
         background-color: #00ff88;
         color: #1e1e1e;
     }
-    /* Removes the number input spin buttons for a cleaner look */
-    input[type=number]::-webkit-inner-spin-button, 
-    input[type=number]::-webkit-outer-spin-button { 
-      -webkit-appearance: none; 
-      margin: 0; 
+
+    /* Clean Text Inputs (Hiding Chrome/Safari arrows if number type used) */
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -55,10 +65,10 @@ st.markdown("""
 # --- SIDEBAR ---
 with st.sidebar:
     st.title("📟 ARB TERMINAL")
-    st.info("Strategy: FD & DK Source Only")
+    st.info("Source Logic: FanDuel & DraftKings Only")
     quota_placeholder = st.empty()
 
-# --- INPUT AREA ---
+# --- INPUT AREA (Main Scan) ---
 with st.container():
     with st.form("input_panel"):
         col1, col2 = st.columns(2)
@@ -73,24 +83,29 @@ with st.container():
         with col3:
             sport_cat = st.radio("Sport", ["All Sports", "NBA", "NFL", "NHL", "NCAAB", "NCAAF"], horizontal=True)
         with col4:
-            # Using text_input to remove +/- signs
+            # Clean text input for wager to avoid +/- buttons
             max_wager_raw = st.text_input("Wager ($)", value="50.0")
-            max_wager = float(max_wager_raw) if max_wager_raw.replace('.','',1).isdigit() else 50.0
 
         if promo_type == "Profit Boost (%)":
             boost_val_raw = st.text_input("Boost (%)", value="50")
-            boost_val = int(boost_val_raw) if boost_val_raw.isdigit() else 50
         else:
-            boost_val = 0
+            boost_val_raw = "0"
 
         run_scan = st.form_submit_button("EXECUTE LIVE SCAN")
 
-# --- DATA & LOGIC ---
+# --- SCAN LOGIC ---
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
         st.error("Missing API Key! Please add ODDS_API_KEY to your Streamlit Secrets.")
     else:
+        # Convert strings to numbers for logic
+        try:
+            max_wager = float(max_wager_raw)
+            boost_val = float(boost_val_raw)
+        except:
+            max_wager, boost_val = 50.0, 0.0
+
         sport_map = {
             "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab", "americanfootball_ncaaf"],
             "NBA": ["basketball_nba"], 
@@ -100,6 +115,7 @@ if run_scan:
             "NCAAF": ["americanfootball_ncaaf"]
         }
         
+        # Define allowed hedge books
         BOOK_LIST = "draftkings,fanduel,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
@@ -135,46 +151,41 @@ if run_scan:
                                 
                                 if best_h:
                                     s_price, h_price = s['price'], best_h['price']
-                                    s_mult = (s_price / 100) if s_price > 0 else (100 / abs(s_price))
-                                    h_mult = (h_price / 100) if h_price > 0 else (100 / abs(h_price))
+                                    s_m = (s_price / 100) if s_price > 0 else (100 / abs(s_price))
+                                    h_m = (h_price / 100) if h_price > 0 else (100 / abs(h_price))
 
                                     if promo_type == "Profit Boost (%)":
-                                        boost_factor = 1 + (boost_val / 100)
-                                        boosted_s_mult = s_mult * boost_factor
-                                        raw_hedge = (max_wager * (1 + boosted_s_mult)) / (1 + h_mult)
-                                        hedge_needed = float(round(raw_hedge))
-                                        p_source_wins = (max_wager * boosted_s_mult) - hedge_needed
-                                        p_hedge_wins = (hedge_needed * h_mult) - max_wager
-                                        profit = min(p_source_wins, p_hedge_wins)
+                                        b_factor = 1 + (boost_val / 100)
+                                        boosted_s_m = s_m * b_factor
+                                        raw_h = (max_wager * (1 + boosted_s_m)) / (1 + h_m)
+                                        h_needed = float(round(raw_h))
+                                        profit = min(((max_wager * boosted_s_m) - h_needed), ((h_needed * h_m) - max_wager))
                                         rating = profit
 
                                     elif promo_type == "Bonus Bet (SNR)":
-                                        raw_hedge = (max_wager * s_mult) / (1 + h_mult)
-                                        hedge_needed = float(round(raw_hedge))
-                                        p_source_wins = (max_wager * s_mult) - hedge_needed
-                                        p_hedge_wins = (hedge_needed * h_mult)
-                                        profit = min(p_source_wins, p_hedge_wins)
+                                        raw_h = (max_wager * s_m) / (1 + h_m)
+                                        h_needed = float(round(raw_h))
+                                        profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                         rating = (profit / max_wager) * 100
 
                                     else: # No-Sweat
-                                        ref_conv = 0.70
-                                        raw_hedge = (max_wager * (s_mult + 1 - ref_conv)) / (h_mult + 1 + ref_conv)
-                                        hedge_needed = float(round(raw_hedge))
-                                        p_source_wins = (max_wager * s_mult) - hedge_needed
-                                        p_hedge_wins = (hedge_needed * h_mult) + (max_wager * ref_conv) - max_wager
-                                        profit = min(p_source_wins, p_hedge_wins)
+                                        ref_c = 0.70
+                                        raw_h = (max_wager * (s_m + 1 - ref_c)) / (h_m + 1 + ref_c)
+                                        h_needed = float(round(raw_h))
+                                        p_s = (max_wager * s_m) - h_needed
+                                        p_h = (h_needed * h_m) + (max_wager * ref_c) - max_wager
+                                        profit = min(p_s, p_h)
                                         rating = (profit / max_wager) * 100
 
                                     if profit > 0:
                                         all_opps.append({
                                             "game": f"{game['away_team']} vs {game['home_team']}",
                                             "start_cst": cst_time.strftime("%m/%d %I:%M %p"),
-                                            "profit": profit, "hedge": hedge_needed, "rating": rating,
+                                            "profit": profit, "hedge": h_needed, "rating": rating,
                                             "s_team": s['team'], "s_book": s['book'], "s_price": s_price,
                                             "h_team": best_h['team'], "h_book": best_h['book'], "h_price": h_price
                                         })
-                except Exception as e:
-                    continue
+                except: continue
 
         st.markdown("### 🏆 Top Scanned Opportunities")
         sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
@@ -206,26 +217,50 @@ with st.expander("Open Manual Calculator", expanded=True):
     with st.form("manual_calc_form"):
         m_promo = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"], horizontal=True)
         m_col1, m_col2 = st.columns(2)
+        
         with m_col1:
-            # Clean text inputs for mobile
-            m_s_price_raw = st.text_input("Source Odds (Underdog)", value="250")
+            m_s_price_raw = st.text_input("Source Odds (Underdog) e.g. 250", value="250")
             m_wager_raw = st.text_input("Wager Amount ($)", value="50.0")
             if m_promo == "Profit Boost (%)":
                 m_boost_raw = st.text_input("Boost %", value="50")
+        
         with m_col2:
-            h_input_raw = st.text_input("Hedge Odds (Favorite)", value="300")
+            h_input_raw = st.text_input("Hedge Odds (Favorite) e.g. 300", value="300")
             if m_promo == "No-Sweat Bet":
                 m_conv_raw = st.text_input("Refund Conversion %", value="70")
 
         submit_calc = st.form_submit_button("📊 CALCULATE HEDGE", type="primary", use_container_width=True)
 
     if submit_calc:
-        # Conversion logic for manual inputs
         try:
             m_s_p = float(m_s_price_raw)
             m_w = float(m_wager_raw)
             h_i = float(h_input_raw)
-            m_h_p = -abs(h_i)
+            m_h_p = -abs(h_i) # Auto-negative Favorite
             
             ms_m = (m_s_p / 100) if m_s_p > 0 else (100 / abs(m_s_p))
-            mh_m = (m_h
+            mh_m = (m_h_p / 100) if m_h_p > 0 else (100 / abs(m_h_p))
+
+            if m_promo == "Profit Boost (%)":
+                m_b = float(m_boost_raw)
+                boost_f = 1 + (m_b / 100)
+                boosted_ms_m = ms_m * boost_f
+                m_hedge = (m_w * (1 + boosted_ms_m)) / (1 + mh_m)
+                m_profit = (m_w * boosted_ms_m) - m_hedge
+            elif m_promo == "Bonus Bet (SNR)":
+                m_hedge = (m_w * ms_m) / (1 + mh_m)
+                m_profit = (m_w * ms_m) - m_hedge
+            else: # No-Sweat
+                m_c = float(m_conv_raw) / 100
+                m_hedge = (m_w * (ms_m + 1 - m_c)) / (mh_m + 1 + m_c)
+                m_profit = (m_w * ms_m) - (m_hedge + (m_w * (1 - m_c)))
+
+            st.divider()
+            st.info(f"Odds Used: **{m_s_p:+.0f}** vs **{m_h_p:+.0f}**")
+            res_c1, res_c2, res_c3 = st.columns(3)
+            res_c1.metric("Hedge Amount", f"${m_hedge:.2f}")
+            res_c2.metric("Net Profit", f"${m_profit:.2f}")
+            res_c3.metric("ROI", f"{((m_profit/m_w)*100):.1f}%")
+            
+        except:
+            st.error("⚠️ Syntax Error: Please enter valid numbers.")
