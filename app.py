@@ -39,6 +39,7 @@ st.markdown("""
         font-weight: bold;
         transition: 0.3s;
     }
+    /* Hide number input spinners */
     input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
         -webkit-appearance: none;
         margin: 0;
@@ -49,7 +50,7 @@ st.markdown("""
 # --- SIDEBAR ---
 with st.sidebar:
     st.title("📟 ARB TERMINAL")
-    st.info("Strategy: DK, FD, & Caesars Source")
+    st.info("Source Logic: FD & DK Only")
     quota_placeholder = st.empty()
 
 # --- INPUT AREA ---
@@ -59,9 +60,8 @@ with st.container():
         with col1:
             promo_type = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"], horizontal=True)
         with col2:
-            source_book_display = st.radio("Source Book", ["DraftKings", "FanDuel", "Caesars"], horizontal=True)
-            source_map = {"DraftKings": "draftkings", "FanDuel": "fanduel", "Caesars": "williamhill_us"}
-            source_book = source_map[source_book_display]
+            source_book_display = st.radio("Source Book", ["DraftKings", "FanDuel"], horizontal=True)
+            source_book = source_book_display.lower()
 
         st.divider()
         col3, col4 = st.columns([3, 1])
@@ -90,8 +90,8 @@ if run_scan:
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"], "NCAAF": ["americanfootball_ncaaf"]
         }
         
-        # Master list of books to check
-        BOOK_LIST = "draftkings,fanduel,williamhill_us,fanatics,espnbet,betmgm"
+        # Caesars removed from scan
+        BOOK_LIST = "draftkings,fanduel,fanatics,espnbet,betmgm"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
 
