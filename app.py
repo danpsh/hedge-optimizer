@@ -43,6 +43,12 @@ st.markdown("""
         background-color: #00ff88;
         color: #1e1e1e;
     }
+    /* Removes the number input spin buttons for a cleaner look */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -67,10 +73,13 @@ with st.container():
         with col3:
             sport_cat = st.radio("Sport", ["All Sports", "NBA", "NFL", "NHL", "NCAAB", "NCAAF"], horizontal=True)
         with col4:
-            max_wager = st.number_input("Wager ($)", min_value=1.0, value=50.0)
+            # Using text_input to remove +/- signs
+            max_wager_raw = st.text_input("Wager ($)", value="50.0")
+            max_wager = float(max_wager_raw) if max_wager_raw.replace('.','',1).isdigit() else 50.0
 
         if promo_type == "Profit Boost (%)":
-            boost_val = st.number_input("Boost (%)", min_value=1, value=50)
+            boost_val_raw = st.text_input("Boost (%)", value="50")
+            boost_val = int(boost_val_raw) if boost_val_raw.isdigit() else 50
         else:
             boost_val = 0
 
@@ -189,7 +198,7 @@ if run_scan:
                         st.metric("Guaranteed Profit", f"${op['profit']:.2f}")
                         st.caption(f"Rating: {op['rating']:.1f}%")
 
-# --- STANDALONE MANUAL CALCULATOR (Placed under top 10 results) ---
+# --- STANDALONE MANUAL CALCULATOR ---
 st.write("---")
 st.subheader("🧮 Manual Multi-Strategy Calculator")
 
@@ -198,37 +207,25 @@ with st.expander("Open Manual Calculator", expanded=True):
         m_promo = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"], horizontal=True)
         m_col1, m_col2 = st.columns(2)
         with m_col1:
-            m_s_price = st.number_input("Source Odds (Underdog) e.g. 250", value=250)
-            m_wager = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
+            # Clean text inputs for mobile
+            m_s_price_raw = st.text_input("Source Odds (Underdog)", value="250")
+            m_wager_raw = st.text_input("Wager Amount ($)", value="50.0")
             if m_promo == "Profit Boost (%)":
-                m_boost = st.number_input("Boost %", min_value=0, value=50)
+                m_boost_raw = st.text_input("Boost %", value="50")
         with m_col2:
-            h_input = st.number_input("Hedge Odds (Favorite) e.g. 300", value=300)
+            h_input_raw = st.text_input("Hedge Odds (Favorite)", value="300")
             if m_promo == "No-Sweat Bet":
-                m_conv = st.number_input("Refund Conversion %", value=70) / 100
+                m_conv_raw = st.text_input("Refund Conversion %", value="70")
 
         submit_calc = st.form_submit_button("📊 CALCULATE HEDGE", type="primary", use_container_width=True)
 
     if submit_calc:
-        m_h_price = -abs(h_input) # Automaticaly negative for mobile
-        ms_m = (m_s_price / 100) if m_s_price > 0 else (100 / abs(m_s_price))
-        mh_m = (m_h_price / 100) if m_h_price > 0 else (100 / abs(m_h_price))
-
-        if m_promo == "Profit Boost (%)":
-            boost_f = 1 + (m_boost / 100)
-            boosted_ms_m = ms_m * boost_f
-            m_hedge = (m_wager * (1 + boosted_ms_m)) / (1 + mh_m)
-            m_profit = (m_wager * boosted_ms_m) - m_hedge
-        elif m_promo == "Bonus Bet (SNR)":
-            m_hedge = (m_wager * ms_m) / (1 + mh_m)
-            m_profit = (m_wager * ms_m) - m_hedge
-        else: # No-Sweat
-            m_hedge = (m_wager * (ms_m + 1 - m_conv)) / (mh_m + 1 + m_conv)
-            m_profit = (m_wager * ms_m) - (m_hedge + (m_wager * (1 - m_conv)))
-
-        st.divider()
-        st.info(f"Odds Used: **{m_s_price}** vs **{m_h_price}**")
-        res_c1, res_c2, res_c3 = st.columns(3)
-        res_c1.metric("Hedge Amount", f"${m_hedge:.2f}")
-        res_c2.metric("Net Profit", f"${m_profit:.2f}")
-        res_c3.metric("ROI", f"{((m_profit/m_wager)*100):.1f}%")
+        # Conversion logic for manual inputs
+        try:
+            m_s_p = float(m_s_price_raw)
+            m_w = float(m_wager_raw)
+            h_i = float(h_input_raw)
+            m_h_p = -abs(h_i)
+            
+            ms_m = (m_s_p / 100) if m_s_p > 0 else (100 / abs(m_s_p))
+            mh_m = (m_h
