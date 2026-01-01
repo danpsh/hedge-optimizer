@@ -75,15 +75,22 @@ with st.container():
         with col1:
             promo_type = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"], horizontal=True)
         with col2:
-            source_book_display = st.radio("Source Book", ["DraftKings", "FanDuel"], horizontal=True)
-            source_book = source_book_display.lower()
+            # Added Caesars to the radio options
+            source_book_display = st.radio("Source Book", ["DraftKings", "FanDuel", "Caesars"], horizontal=True)
+            
+            # Map display name to API keys
+            source_map = {
+                "DraftKings": "draftkings",
+                "FanDuel": "fanduel",
+                "Caesars": "williamhill_us"
+            }
+            source_book = source_map[source_book_display]
 
         st.divider()
         col3, col4 = st.columns([3, 1])
         with col3:
             sport_cat = st.radio("Sport", ["All Sports", "NBA", "NFL", "NHL", "NCAAB", "NCAAF"], horizontal=True)
         with col4:
-            # Clean text input for wager to avoid +/- buttons
             max_wager_raw = st.text_input("Wager ($)", value="50.0")
 
         if promo_type == "Profit Boost (%)":
@@ -92,14 +99,13 @@ with st.container():
             boost_val_raw = "0"
 
         run_scan = st.form_submit_button("EXECUTE LIVE SCAN")
-
+        
 # --- SCAN LOGIC ---
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
-        st.error("Missing API Key! Please add ODDS_API_KEY to your Streamlit Secrets.")
+        st.error("Missing API Key!")
     else:
-        # Convert strings to numbers for logic
         try:
             max_wager = float(max_wager_raw)
             boost_val = float(boost_val_raw)
@@ -115,8 +121,29 @@ if run_scan:
             "NCAAF": ["americanfootball_ncaaf"]
         }
         
+        # Ensure williamhill_us is in the master list
+        BOOK_LIST = "draftkings,fanduel,williamhill_us,fanatics,espnbet,betmgm"
+        all_opps = []
+        now_utc = datetime.now(timezone.utc)
+
+        with st.spinner(f"Scanning {sport_cat} using {source_book_display} as Source..."):
+            sports_to_scan = sport_map.get(sport_cat, [])
+            for sport in sports_to_scan:
+                url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
+                params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
+                
+                try:
+                    res = requests.get(url, params=params)
+                    quota_placeholder.markdown(f"**Quota:** :green[{res.headers.get('x-requests-remaining', 'N/A')}]")
+
+                    if res.status_code == 200:
+                        games = res.json()
+                        for game in games:
+                            # ... (Rest of the logic remains the same)
+        }
+        
         # Define allowed hedge books
-        BOOK_LIST = "draftkings,fanduel,caesars,fanatics,espnbet"
+        BOOK_LIST = "draftkings,fanduel,williamhill_us,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
 
@@ -264,3 +291,4 @@ with st.expander("Open Manual Calculator", expanded=True):
             
         except:
             st.error("⚠️ Syntax Error: Please enter valid numbers.")
+
