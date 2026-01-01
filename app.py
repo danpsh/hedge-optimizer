@@ -88,10 +88,9 @@ with st.container():
 # --- STANDALONE MANUAL CALCULATOR ---
 st.write("---")
 st.subheader("🧮 Manual Multi-Strategy Calculator")
-st.caption("Enter your odds and click 'Calculate' to see the results.")
+st.caption("Enter your odds and click 'Calculate'.")
 
 with st.expander("Open Manual Calculator", expanded=True):
-    # Use a form to batch the inputs together
     with st.form("manual_calc_form"):
         m_promo = st.radio(
             "Manual Strategy", 
@@ -102,24 +101,24 @@ with st.expander("Open Manual Calculator", expanded=True):
         
         m_col1, m_col2 = st.columns(2)
         with m_col1:
-            m_s_price = st.number_input("Source Odds (American)", value=150, key="ms")
+            # Labels updated to reflect Underdog vs Favorite roles
+            m_s_price = st.number_input("Source Odds (Underdog) e.g. 250", value=250, key="ms")
             m_wager = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0, key="mw")
             if m_promo == "Profit Boost (%)":
                 m_boost = st.number_input("Boost %", min_value=0, value=50, key="mb")
         
         with m_col2:
-            m_h_price = st.number_input("Hedge Odds (American)", value=-120, key="mh")
+            # Allow negative numbers for favorites
+            m_h_price = st.number_input("Hedge Odds (Favorite) e.g. -300", value=-300, step=1, key="mh")
             if m_promo == "No-Sweat Bet":
-                # Removed the 65% goal, now a standard input
                 m_conv_input = st.number_input("Refund Conversion %", min_value=0, value=70, key="mc")
                 m_conv = m_conv_input / 100
 
-        # The actual Calculate button
         submit_calc = st.form_submit_button("📊 CALCULATE HEDGE", type="primary", use_container_width=True)
 
-    # Only show results if the button is pressed
     if submit_calc:
         # --- MATH LOGIC ---
+        # Handles both positive (underdog) and negative (favorite) math
         ms_m = (m_s_price / 100) if m_s_price > 0 else (100 / abs(m_s_price))
         mh_m = (m_h_price / 100) if m_h_price > 0 else (100 / abs(m_h_price))
 
@@ -136,6 +135,20 @@ with st.expander("Open Manual Calculator", expanded=True):
         else: # No-Sweat Bet
             m_hedge = (m_wager * (ms_m + 1 - m_conv)) / (mh_m + 1 + m_conv)
             m_profit = (m_wager * ms_m) - (m_hedge + (m_wager * (1 - m_conv)))
+
+        # --- DISPLAY RESULTS ---
+        st.divider()
+        res_c1, res_c2, res_c3 = st.columns(3)
+        res_c1.metric("Hedge Amount", f"${m_hedge:.2f}")
+        res_c2.metric("Net Profit", f"${m_profit:.2f}")
+        
+        m_rating = (m_profit / m_wager) * 100
+        res_c3.metric("ROI / Conversion", f"{m_rating:.1f}%")
+
+        if m_profit > 0:
+            st.success(f"✅ Place **${m_hedge:.2f}** on the Favorite side.")
+        else:
+            st.error("⚠️ Negative Profit: The lines are too wide to lock in profit.")
 
         # --- DISPLAY RESULTS ---
         st.divider()
@@ -304,5 +317,6 @@ if run_scan:
                     with c3:
                         st.metric("Guaranteed Profit", f"${op['profit']:.2f}")
                         st.caption(f"Rating: {op['rating']:.1f}%")
+
 
 
