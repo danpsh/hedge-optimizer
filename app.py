@@ -18,6 +18,17 @@ with st.sidebar:
     st.info("Source: FD & DK Only")
     quota_placeholder = st.empty()
 
+# --- UPDATE THE SPORT MAP IN THE LOGIC SECTION ---
+# Make sure to replace your existing sport_map with this one:
+sport_map = {
+    "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab", "americanfootball_ncaaf"],
+    "NBA": ["basketball_nba"], 
+    "NFL": ["americanfootball_nfl"], 
+    "NHL": ["icehockey_nhl"], 
+    "NCAAB": ["basketball_ncaab"],
+    "NCAAF": ["americanfootball_ncaaf"]
+
+
 # --- INPUT AREA ---
 with st.container():
     with st.form("input_panel"):
@@ -56,16 +67,7 @@ with st.container():
 
         run_scan = st.form_submit_button("Calculate")
 
-# --- UPDATE THE SPORT MAP IN THE LOGIC SECTION ---
-# Make sure to replace your existing sport_map with this one:
-sport_map = {
-    "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab", "americanfootball_ncaaf"],
-    "NBA": ["basketball_nba"], 
-    "NFL": ["americanfootball_nfl"], 
-    "NHL": ["icehockey_nhl"], 
-    "NCAAB": ["basketball_ncaab"],
-    "NCAAF": ["americanfootball_ncaaf"]
-}
+
 
 # --- DATA & LOGIC ---
 if run_scan:
@@ -175,6 +177,7 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.caption(f"Rating/Conversion: {op['rating']:.1f}%")
+
 
 
 
