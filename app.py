@@ -23,9 +23,14 @@ with st.container():
     with st.form("input_panel"):
         col1, col2 = st.columns(2)
         with col1:
-            promo_type = st.selectbox("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"])
+            # Horizontal radio for Strategy
+            promo_type = st.radio(
+                "Strategy", 
+                ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"],
+                horizontal=True
+            )
             
-            # Horizontal radio buttons for quick selection
+            # Horizontal radio for Source Book
             source_book_display = st.radio(
                 "Source Book", 
                 ["DraftKings", "FanDuel"], 
@@ -152,5 +157,6 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.caption(f"Rating/Conversion: {op['rating']:.1f}%")
+
 
 
