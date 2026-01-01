@@ -3,54 +3,31 @@ import requests
 from datetime import datetime, timezone, timedelta
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Arbitrage Edge", layout="wide")
+st.set_page_config(page_title="Arb Terminal", layout="wide")
 
-# --- LIGHT TECH THEME (White Background) ---
+# --- LIGHT TECH THEME ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
     div[data-testid="stExpander"] {
-        background-color: #ffffff;
-        border: 1px solid #d1d5db;
-        border-radius: 12px;
-        margin-bottom: 12px;
+        background-color: #ffffff; border: 1px solid #d1d5db;
+        border-radius: 12px; margin-bottom: 12px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    div[data-testid="stExpander"]:hover {
-        border: 1px solid #00ff88;
-        box-shadow: 0 4px 12px rgba(0, 255, 136, 0.15);
-    }
     [data-testid="stMetricValue"] { 
-        color: #008f51 !important; 
-        font-family: 'Courier New', monospace; 
-        font-weight: 800;
-    }
-    div.row-widget.stRadio > div {
-        background-color: #ffffff;
-        padding: 12px;
-        border-radius: 10px;
-        border: 1px solid #e5e7eb;
+        color: #008f51 !important; font-family: 'Courier New', monospace; font-weight: 800;
     }
     .stButton>button {
-        background-color: #1e1e1e;
-        color: #00ff88;
-        border: none;
-        border-radius: 8px;
-        font-weight: bold;
-        transition: 0.3s;
+        background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
-    /* Hide number input spinners */
-    input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-    }
+    input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.title("📟 ARB TERMINAL")
-    st.info("Source Logic: FD & DK Only")
+    st.info("Source: FD/DK | Hedge: Caesars + Field")
     quota_placeholder = st.empty()
 
 # --- INPUT AREA ---
@@ -60,6 +37,7 @@ with st.container():
         with col1:
             promo_type = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"], horizontal=True)
         with col2:
+            # Source limited to your primary two books
             source_book_display = st.radio("Source Book", ["DraftKings", "FanDuel"], horizontal=True)
             source_book = source_book_display.lower()
 
@@ -90,12 +68,12 @@ if run_scan:
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"], "NCAAF": ["americanfootball_ncaaf"]
         }
         
-        # Caesars removed from scan
-        BOOK_LIST = "draftkings,fanduel,fanatics,espnbet,betmgm"
+        # Included both williamhill_us and caesars in the hedge pool
+        BOOK_LIST = "draftkings,fanduel,williamhill_us,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
 
-        with st.spinner(f"Scanning {sport_cat}..."):
+        with st.spinner(f"Scanning for {source_book_display} boosts..."):
             sports_to_scan = sport_map.get(sport_cat, [])
             for sport in sports_to_scan:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
@@ -116,11 +94,16 @@ if run_scan:
                                 for market in book['markets']:
                                     for o in market['outcomes']:
                                         entry = {'book': book['title'], 'key': book['key'], 'team': o['name'], 'price': o['price']}
-                                        if book['key'] == source_book: source_odds.append(entry)
-                                        else: hedge_odds.append(entry)
+                                        
+                                        # Strictly assign to Source or Hedge list
+                                        if book['key'] == source_book:
+                                            source_odds.append(entry)
+                                        else:
+                                            hedge_odds.append(entry)
 
                             for s in source_odds:
                                 opp_team = [t for t in [game['home_team'], game['away_team']] if t != s['team']][0]
+                                # Look for the best counter-price among ALL other books (including Caesars)
                                 eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
                                 if not eligible_hedges: continue
                                 
@@ -155,15 +138,22 @@ if run_scan:
         st.markdown("### 🏆 Top Scanned Opportunities")
         sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
         if not sorted_opps:
-            st.warning("No high-value matches found.")
+            st.warning(f"No high-value {source_book_display} matches found.")
         else:
             for i, op in enumerate(sorted_opps[:10]):
                 with st.expander(f"RANK {i+1} | {op['time']} | +${op['profit']:.2f}"):
                     st.write(f"**{op['game']}**")
                     c1, c2, c3 = st.columns(3)
-                    c1.info(f"Source: {op['s_team']} @ {op['s_price']:+}\n\n**Bet ${max_wager:.0f}**")
-                    c2.success(f"Hedge: {op['h_team']} @ {op['h_price']:+}\n\n**Bet ${op['hedge']:.0f}**")
-                    c3.metric("Profit", f"${op['profit']:.2f}")
+                    with c1:
+                        st.caption(f"SOURCE: {op['s_book'].upper()}")
+                        st.info(f"Bet **${max_wager:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
+                    with c2:
+                        # This will now correctly display "Caesars Sportsbook" or others
+                        st.caption(f"HEDGE: {op['h_book'].upper()}")
+                        st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
+                    with c3:
+                        st.metric("Profit", f"${op['profit']:.2f}")
+                        st.caption(f"Rating: {op['rating']:.1f}%")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
