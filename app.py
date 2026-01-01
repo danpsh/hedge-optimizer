@@ -21,16 +21,15 @@ with st.sidebar:
 # --- INPUT AREA ---
 with st.container():
     with st.form("input_panel"):
+        # First row for Strategy and Source Book
         col1, col2 = st.columns(2)
         with col1:
-            # Horizontal radio for Strategy
             promo_type = st.radio(
                 "Strategy", 
                 ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"],
                 horizontal=True
             )
-            
-            # Horizontal radio for Source Book
+        with col2:
             source_book_display = st.radio(
                 "Source Book", 
                 ["DraftKings", "FanDuel"], 
@@ -38,16 +37,35 @@ with st.container():
             )
             source_book = source_book_display.lower()
 
-        with col2:
-            sport_cat = st.selectbox("Sport", ["All Sports", "NBA", "NFL", "NHL", "NCAAB"])
-            max_wager = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
-            
+        # Second row for Sport and Wager
+        st.divider()
+        col3, col4 = st.columns([3, 1])
+        with col3:
+            sport_cat = st.radio(
+                "Sport", 
+                ["All Sports", "NBA", "NFL", "NHL", "NCAAB", "NCAAF"],
+                horizontal=True
+            )
+        with col4:
+            max_wager = st.number_input("Wager ($)", min_value=1.0, value=50.0)
+
         if promo_type == "Profit Boost (%)":
             boost_val = st.number_input("Boost (%)", min_value=1, value=50)
         else:
             boost_val = 0
 
         run_scan = st.form_submit_button("🔥 RUN GLOBAL SCAN")
+
+# --- UPDATE THE SPORT MAP IN THE LOGIC SECTION ---
+# Make sure to replace your existing sport_map with this one:
+sport_map = {
+    "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab", "americanfootball_ncaaf"],
+    "NBA": ["basketball_nba"], 
+    "NFL": ["americanfootball_nfl"], 
+    "NHL": ["icehockey_nhl"], 
+    "NCAAB": ["basketball_ncaab"],
+    "NCAAF": ["americanfootball_ncaaf"]
+}
 
 # --- DATA & LOGIC ---
 if run_scan:
@@ -157,6 +175,7 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.caption(f"Rating/Conversion: {op['rating']:.1f}%")
+
 
 
 
