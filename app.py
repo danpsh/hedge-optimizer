@@ -14,7 +14,7 @@ st.markdown("""
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title("🛡️ Arbitrage Edge")
+    st.title("Arbitrage Edge")
     st.info("Source: FD & DK Only")
     quota_placeholder = st.empty()
 
@@ -54,7 +54,7 @@ with st.container():
         else:
             boost_val = 0
 
-        run_scan = st.form_submit_button("🔥 RUN GLOBAL SCAN")
+        run_scan = st.form_submit_button("Calculate")
 
 # --- UPDATE THE SPORT MAP IN THE LOGIC SECTION ---
 # Make sure to replace your existing sport_map with this one:
@@ -175,6 +175,7 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.caption(f"Rating/Conversion: {op['rating']:.1f}%")
+
 
 
 
