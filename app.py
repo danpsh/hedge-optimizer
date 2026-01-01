@@ -101,18 +101,16 @@ with st.expander("Open Manual Calculator", expanded=True):
                 m_boost = st.number_input("Boost %", min_value=0, value=50)
         
         with m_col2:
-            # Type 300, code makes it -300
             h_input = st.number_input("Hedge Odds (Favorite) e.g. 300", value=300)
-            m_h_price = -abs(h_input)
-            st.caption(f"Treating Favorite as: **{m_h_price}**")
-            
             if m_promo == "No-Sweat Bet":
                 m_conv = st.number_input("Refund Conversion %", value=70) / 100
 
         submit_calc = st.form_submit_button("📊 CALCULATE HEDGE", type="primary", use_container_width=True)
 
+    # ONLY ONE RESULTS BLOCK
     if submit_calc:
-        # American to Multiplier Logic
+        m_h_price = -abs(h_input)
+        
         ms_m = (m_s_price / 100) if m_s_price > 0 else (100 / abs(m_s_price))
         mh_m = (m_h_price / 100) if m_h_price > 0 else (100 / abs(m_h_price))
 
@@ -129,41 +127,12 @@ with st.expander("Open Manual Calculator", expanded=True):
             m_profit = (m_wager * ms_m) - (m_hedge + (m_wager * (1 - m_conv)))
 
         st.divider()
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Hedge Amount", f"${m_hedge:.2f}")
-        c2.metric("Net Profit", f"${m_profit:.2f}")
-        c3.metric("ROI", f"{((m_profit/m_wager)*100):.1f}%")
-    # --- MATH LOGIC ---
-    ms_m = (m_s_price / 100) if m_s_price > 0 else (100 / abs(m_s_price))
-    mh_m = (m_h_price / 100) if m_h_price > 0 else (100 / abs(m_h_price))
-
-    if m_promo == "Profit Boost (%)":
-        boost_f = 1 + (m_boost / 100)
-        boosted_ms_m = ms_m * boost_f
-        m_hedge = (m_wager * (1 + boosted_ms_m)) / (1 + mh_m)
-        m_profit = (m_wager * boosted_ms_m) - m_hedge
-
-    elif m_promo == "Bonus Bet (SNR)":
-        m_hedge = (m_wager * ms_m) / (1 + mh_m)
-        m_profit = (m_wager * ms_m) - m_hedge
-
-    else: # No-Sweat Bet
-        m_hedge = (m_wager * (ms_m + 1 - m_conv)) / (mh_m + 1 + m_conv)
-        m_profit = (m_wager * ms_m) - (m_hedge + (m_wager * (1 - m_conv)))
-
-    # --- DISPLAY RESULTS ---
-    st.divider()
-    res_c1, res_c2, res_c3 = st.columns(3)
-    res_c1.metric("Hedge Amount", f"${m_hedge:.2f}")
-    res_c2.metric("Net Profit", f"${m_profit:.2f}")
-    
-    m_rating = (m_profit / m_wager) * 100
-    res_c3.metric("ROI / Conversion", f"{m_rating:.1f}%")
-
-    if m_profit > 0:
-        st.success(f"✅ Place **${m_hedge:.2f}** on the hedge side.")
-    else:
-        st.error("⚠️ Negative Profit: This line will lose money.")
+        st.info(f"Odds Used: **{m_s_price}** vs **{m_h_price}**")
+        
+        res_c1, res_c2, res_c3 = st.columns(3)
+        res_c1.metric("Hedge Amount", f"${m_hedge:.2f}")
+        res_c2.metric("Net Profit", f"${m_profit:.2f}")
+        res_c3.metric("ROI", f"{((m_profit/m_wager)*100):.1f}%")
 
 # --- DATA & LOGIC ---
 if run_scan:
@@ -286,6 +255,7 @@ if run_scan:
                     with c3:
                         st.metric("Guaranteed Profit", f"${op['profit']:.2f}")
                         st.caption(f"Rating: {op['rating']:.1f}%")
+
 
 
 
