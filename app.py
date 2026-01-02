@@ -26,8 +26,7 @@ st.markdown("""
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title("📟 ARB TERMINAL")
-    st.info("Source: FD/DK | Hedge: Caesars + Field")
+    st.title("Promo Converter")
     quota_placeholder = st.empty()
 
 # --- INPUT AREA ---
@@ -35,7 +34,7 @@ with st.container():
     with st.form("input_panel"):
         col1, col2 = st.columns(2)
         with col1:
-            promo_type = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"], horizontal=True)
+            promo_type = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
         with col2:
             # Source limited to your primary two books
             source_book_display = st.radio("Source Book", ["DraftKings", "FanDuel"], horizontal=True)
@@ -49,7 +48,7 @@ with st.container():
             max_wager_raw = st.text_input("Wager ($)", value="50.0")
 
         boost_val_raw = st.text_input("Boost (%)", value="50") if promo_type == "Profit Boost (%)" else "0"
-        run_scan = st.form_submit_button("EXECUTE LIVE SCAN")
+        run_scan = st.form_submit_button("Run Optimizer")
 
 # --- SCAN LOGIC ---
 if run_scan:
@@ -157,10 +156,10 @@ if run_scan:
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
-st.subheader("🧮 Manual Multi-Strategy Calculator")
+st.subheader("Manual Calculator")
 with st.expander("Open Manual Calculator", expanded=True):
     with st.form("manual_calc_form"):
-        m_promo = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet (SNR)", "No-Sweat Bet"], horizontal=True, key="m_strat")
+        m_promo = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True, key="m_strat")
         m_col1, m_col2 = st.columns(2)
         with m_col1:
             m_s_price = st.text_input("Source Odds", value="250")
@@ -170,7 +169,7 @@ with st.expander("Open Manual Calculator", expanded=True):
             m_h_price = st.text_input("Hedge Odds", value="300")
             m_conv = st.text_input("Refund %", value="70") if m_promo == "No-Sweat Bet" else "0"
         
-        if st.form_submit_button("📊 CALCULATE HEDGE", use_container_width=True):
+        if st.form_submit_button("Calculate Hedge", use_container_width=True):
             try:
                 ms_p, mw, mh_i = float(m_s_price), float(m_wager), float(m_h_price)
                 mh_p = -abs(mh_i)
@@ -195,3 +194,4 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc2.metric("Net Profit", f"${m_p:.2f}")
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: st.error("Please enter valid numbers.")
+
