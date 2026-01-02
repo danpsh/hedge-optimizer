@@ -24,10 +24,10 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
-with st.sidebar:
-    st.title("Promo Converter")
-    quota_placeholder = st.empty()
+# --- HEADER AREA (REPLACES SIDEBAR) ---
+st.title("Promo Converter")
+quota_placeholder = st.empty()
+quota_placeholder.markdown("**Quota:** :green[Not scanned yet]")
 
 # --- INPUT AREA ---
 with st.container():
@@ -196,3 +196,4 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc2.metric("Net Profit", f"${m_p:.2f}")
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: st.error("Please enter valid numbers.")
+
