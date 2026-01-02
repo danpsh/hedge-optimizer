@@ -131,24 +131,24 @@ if run_scan:
                                     })
                 except: continue
 
-        st.markdown("### 🏆 Top Scanned Opportunities")
+       st.markdown("### 🏆 Top Scanned Opportunities")
         
-        # Sport Icon Mapping
-        icons = {
-            "basketball_nba": "🏀", "basketball_ncaab": "🏫🏀",
-            "americanfootball_nfl": "🏈", "americanfootball_ncaaf": "🏫🏈",
-            "icehockey_nhl": "🏒"
-        }
-
         sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
         if not sorted_opps:
             st.warning(f"No high-value {source_book_display} matches found.")
         else:
             for i, op in enumerate(sorted_opps[:10]):
-                icon = icons.get(op['sport'], "🏟️")
+                # Extract sport name (e.g., 'nba' or 'nfl')
                 sport_label = op['sport'].split('_')[-1].upper()
                 
-                with st.expander(f"{icon} RANK {i+1} | {op['time']} | +${op['profit']:.2f}"):
+                # Calculate ROI for the title
+                # Profit Boost rating is $, others are already %
+                roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
+                
+                # CLEAN TEXT TITLE: Rank | Sport | Time | Profit (ROI)
+                title = f"RANK {i+1} | {sport_label} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
+                
+                with st.expander(title):
                     st.write(f"**{op['game']}**")
                     c1, c2, c3 = st.columns(3)
                     with c1:
@@ -158,8 +158,8 @@ if run_scan:
                         st.caption(f"HEDGE: {op['h_book'].upper()}")
                         st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
                     with c3:
-                        st.metric("Profit", f"${op['profit']:.2f}")
-                        st.caption(f"{sport_label} | Rating: {op['rating']:.1f}%")
+                        st.metric("Net Profit", f"${op['profit']:.2f}")
+                        st.caption(f"Strategy: {promo_type}")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
@@ -201,3 +201,4 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc2.metric("Net Profit", f"${m_p:.2f}")
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: st.error("Please enter valid numbers.")
+
