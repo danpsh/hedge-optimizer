@@ -190,10 +190,19 @@ with st.expander("Open Manual Calculator", expanded=True):
                     # For Bonus Bets (SNR), we don't get the stake back
                     m_h = (mw * ms_m) / (1 + mh_m)
                     m_p = (mw * ms_m) - m_h
-                else: # No-Sweat
-                    mc = float(m_conv)/100
-                    m_h = (mw * (ms_m + 1 - mc)) / (mh_m + 1 + mc)
-                    m_p = (mw * ms_m) - (m_h + (mw * (1 - mc)))
+               else: # No-Sweat Corrected Logic
+                    mc = float(m_conv)/100 # Retention % (e.g., 0.70)
+                    
+                    # Perfect Hedge Formula for No-Sweat:
+                    # Hedge = (Wager * (Source_Multiplier + (1 - Refund_Rate))) / (Hedge_Multiplier + 1)
+                    # Note: We use (1 - mc) because we lose 30% of that refund's value during conversion
+                    m_h = (mw * (ms_m + (1 - mc))) / (mh_m + 1)
+                    
+                    # Calculate both scenarios to find the guaranteed profit floor
+                    profit_if_source_wins = (mw * ms_m) - m_h
+                    profit_if_hedge_wins = (m_h * mh_m) + (mw * mc) - mw
+                    
+                    m_p = min(profit_if_source_wins, profit_if_hedge_wins)
                 
                 st.divider()
                 rc1, rc2, rc3 = st.columns(3)
@@ -202,3 +211,4 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except Exception as e: 
                 st.error(f"Error: {e}")
+
