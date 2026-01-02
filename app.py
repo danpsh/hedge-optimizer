@@ -131,21 +131,16 @@ if run_scan:
                                     })
                 except: continue
 
-       st.markdown("### 🏆 Top Scanned Opportunities")
-        
+        # --- THIS BLOCK MUST BE INSIDE THE 'IF RUN_SCAN' BLOCK ---
+        st.markdown("### Top Scanned Opportunities")
         sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
         if not sorted_opps:
             st.warning(f"No high-value {source_book_display} matches found.")
         else:
             for i, op in enumerate(sorted_opps[:10]):
-                # Extract sport name (e.g., 'nba' or 'nfl')
                 sport_label = op['sport'].split('_')[-1].upper()
-                
-                # Calculate ROI for the title
-                # Profit Boost rating is $, others are already %
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # CLEAN TEXT TITLE: Rank | Sport | Time | Profit (ROI)
                 title = f"RANK {i+1} | {sport_label} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
                 
                 with st.expander(title):
@@ -161,7 +156,7 @@ if run_scan:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.caption(f"Strategy: {promo_type}")
 
-# --- MANUAL CALCULATOR ---
+# --- MANUAL CALCULATOR (OUTSIDE SCAN LOGIC) ---
 st.write("---")
 st.subheader("Manual Calculator")
 with st.expander("Open Manual Calculator", expanded=True):
@@ -179,7 +174,7 @@ with st.expander("Open Manual Calculator", expanded=True):
         if st.form_submit_button("Calculate Hedge", use_container_width=True):
             try:
                 ms_p, mw, mh_i = float(m_s_price), float(m_wager), float(m_h_price)
-                mh_p = mh_i # Fixed to take the actual input value
+                mh_p = mh_i
                 ms_m = (ms_p/100) if ms_p > 0 else (100/abs(ms_p))
                 mh_m = (mh_p/100) if mh_p > 0 else (100/abs(mh_p))
                 
@@ -201,4 +196,3 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc2.metric("Net Profit", f"${m_p:.2f}")
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: st.error("Please enter valid numbers.")
-
