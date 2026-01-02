@@ -36,7 +36,6 @@ with st.container():
         with col1:
             promo_type = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
         with col2:
-            # Source limited to your primary two books
             source_book_display = st.radio("Source Book", ["DraftKings", "FanDuel"], horizontal=True)
             source_book = source_book_display.lower()
 
@@ -67,7 +66,6 @@ if run_scan:
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"], "NCAAF": ["americanfootball_ncaaf"]
         }
         
-        # Included both williamhill_us and caesars in the hedge pool
         BOOK_LIST = "draftkings,fanduel,williamhill_us,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
@@ -94,7 +92,6 @@ if run_scan:
                                     for o in market['outcomes']:
                                         entry = {'book': book['title'], 'key': book['key'], 'team': o['name'], 'price': o['price']}
                                         
-                                        # Strictly assign to Source or Hedge list
                                         if book['key'] == source_book:
                                             source_odds.append(entry)
                                         else:
@@ -102,7 +99,6 @@ if run_scan:
 
                             for s in source_odds:
                                 opp_team = [t for t in [game['home_team'], game['away_team']] if t != s['team']][0]
-                                # Look for the best counter-price among ALL other books (including Caesars)
                                 eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
                                 if not eligible_hedges: continue
                                 
@@ -115,7 +111,7 @@ if run_scan:
                                     h_needed = round((max_wager * (1 + boosted_s_m)) / (1 + h_m))
                                     profit = min(((max_wager * boosted_s_m) - h_needed), ((h_needed * h_m) - max_wager))
                                     rating = profit
-                                elif promo_type == "Bonus Bet (SNR)":
+                                elif promo_type == "Bonus Bet":
                                     h_needed = round((max_wager * s_m) / (1 + h_m))
                                     profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                     rating = (profit / max_wager) * 100
@@ -127,6 +123,7 @@ if run_scan:
                                 if profit > 0:
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
+                                        "sport": sport,
                                         "time": (commence_time_utc - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
                                         "profit": profit, "hedge": h_needed, "rating": rating,
                                         "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
@@ -135,24 +132,34 @@ if run_scan:
                 except: continue
 
         st.markdown("### 🏆 Top Scanned Opportunities")
+        
+        # Sport Icon Mapping
+        icons = {
+            "basketball_nba": "🏀", "basketball_ncaab": "🏫🏀",
+            "americanfootball_nfl": "🏈", "americanfootball_ncaaf": "🏫🏈",
+            "icehockey_nhl": "🏒"
+        }
+
         sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
         if not sorted_opps:
             st.warning(f"No high-value {source_book_display} matches found.")
         else:
             for i, op in enumerate(sorted_opps[:10]):
-                with st.expander(f"RANK {i+1} | {op['time']} | +${op['profit']:.2f}"):
+                icon = icons.get(op['sport'], "🏟️")
+                sport_label = op['sport'].split('_')[-1].upper()
+                
+                with st.expander(f"{icon} RANK {i+1} | {op['time']} | +${op['profit']:.2f}"):
                     st.write(f"**{op['game']}**")
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.caption(f"SOURCE: {op['s_book'].upper()}")
                         st.info(f"Bet **${max_wager:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
                     with c2:
-                        # This will now correctly display "Caesars Sportsbook" or others
                         st.caption(f"HEDGE: {op['h_book'].upper()}")
                         st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
                     with c3:
                         st.metric("Profit", f"${op['profit']:.2f}")
-                        st.caption(f"Rating: {op['rating']:.1f}%")
+                        st.caption(f"{sport_label} | Rating: {op['rating']:.1f}%")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
@@ -172,7 +179,7 @@ with st.expander("Open Manual Calculator", expanded=True):
         if st.form_submit_button("Calculate Hedge", use_container_width=True):
             try:
                 ms_p, mw, mh_i = float(m_s_price), float(m_wager), float(m_h_price)
-                mh_p = -abs(mh_i)
+                mh_p = mh_i # Fixed to take the actual input value
                 ms_m = (ms_p/100) if ms_p > 0 else (100/abs(ms_p))
                 mh_m = (mh_p/100) if mh_p > 0 else (100/abs(mh_p))
                 
@@ -180,7 +187,7 @@ with st.expander("Open Manual Calculator", expanded=True):
                     boosted_m = ms_m * (1 + float(m_boost)/100)
                     m_h = (mw * (1 + boosted_m)) / (1 + mh_m)
                     m_p = (mw * boosted_m) - m_h
-                elif m_promo == "Bonus Bet (SNR)":
+                elif m_promo == "Bonus Bet":
                     m_h = (mw * ms_m) / (1 + mh_m)
                     m_p = (mw * ms_m) - m_h
                 else:
@@ -194,4 +201,3 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc2.metric("Net Profit", f"${m_p:.2f}")
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: st.error("Please enter valid numbers.")
-
