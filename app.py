@@ -168,41 +168,35 @@ with st.expander("Open Manual Calculator", expanded=True):
             m_wager = st.text_input("Wager ($)", value="50.0")
             m_boost = st.text_input("Boost %", value="50") if m_promo == "Profit Boost (%)" else "0"
         with m_col2:
-            m_h_price = st.text_input("Hedge Odds", value="-300") # Changed default to show it works
+            m_h_price = st.text_input("Hedge Odds", value="-280")
             m_conv = st.text_input("Refund %", value="70") if m_promo == "No-Sweat Bet" else "0"
         
         if st.form_submit_button("Calculate Hedge", use_container_width=True):
             try:
-                ms_p, mw, mh_p = float(m_s_price), float(m_wager), float(m_h_price)
+                ms_p = float(m_s_price)
+                mw = float(m_wager)
+                mh_p = float(m_h_price)
                 
-                # CORRECTED MULTIPLIER LOGIC
-                # For +200: 200/100 = 2.0
-                # For -200: 100/200 = 0.5
+                # Decimal Multipliers (Handles + and - odds)
                 ms_m = (ms_p / 100) if ms_p > 0 else (100 / abs(ms_p))
                 mh_m = (mh_p / 100) if mh_p > 0 else (100 / abs(mh_p))
                 
                 if m_promo == "Profit Boost (%)":
                     boosted_m = ms_m * (1 + float(m_boost)/100)
                     m_h = (mw * (1 + boosted_m)) / (1 + mh_m)
-                    # Profit is (Wager * Boosted Mult) - Hedge Bet
-                    m_p = (mw * boosted_m) - m_h 
+                    m_p = (mw * boosted_m) - m_h
                 elif m_promo == "Bonus Bet":
-                    # For Bonus Bets (SNR), we don't get the stake back
                     m_h = (mw * ms_m) / (1 + mh_m)
                     m_p = (mw * ms_m) - m_h
-               else: # No-Sweat Corrected Logic
-                    mc = float(m_conv)/100 # Retention % (e.g., 0.70)
-                    
-                    # Perfect Hedge Formula for No-Sweat:
-                    # Hedge = (Wager * (Source_Multiplier + (1 - Refund_Rate))) / (Hedge_Multiplier + 1)
-                    # Note: We use (1 - mc) because we lose 30% of that refund's value during conversion
+                else: # No-Sweat Corrected (Matches Excel)
+                    mc = float(m_conv)/100 
+                    # Corrected No-Sweat Formula
                     m_h = (mw * (ms_m + (1 - mc))) / (mh_m + 1)
                     
-                    # Calculate both scenarios to find the guaranteed profit floor
-                    profit_if_source_wins = (mw * ms_m) - m_h
-                    profit_if_hedge_wins = (m_h * mh_m) + (mw * mc) - mw
-                    
-                    m_p = min(profit_if_source_wins, profit_if_hedge_wins)
+                    # Lock in the profit floor
+                    p_win = (mw * ms_m) - m_h
+                    p_loss = (m_h * mh_m) + (mw * mc) - mw
+                    m_p = min(p_win, p_loss)
                 
                 st.divider()
                 rc1, rc2, rc3 = st.columns(3)
@@ -210,5 +204,6 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc2.metric("Net Profit", f"${m_p:.2f}")
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except Exception as e: 
-                st.error(f"Error: {e}")
+                st.error("Please enter valid numbers.")
+
 
