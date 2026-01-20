@@ -36,18 +36,31 @@ with st.container():
         with col1:
             promo_type = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
         with col2:
-            # Standardizing display names
             source_book_display = st.radio("Source Book (Promo)", ["DraftKings", "FanDuel", "BetMGM"], horizontal=True)
-            # Internal key mapping
             source_book = source_book_display.lower().replace(" ", "") 
         with col_hedge:
             hedge_book_display = st.radio("Hedge Book (Filter)", ["All Books", "DraftKings", "FanDuel", "BetMGM"], horizontal=True)
             hedge_filter = hedge_book_display.lower().replace(" ", "")
 
         st.divider()
-        col3, col4 = st.columns([3, 1])
-        with col3:
-            sport_cat = st.radio("Sport", ["All Sports", "NBA", "NFL", "NHL", "NCAAB", "NCAAF"], horizontal=True)
+        
+        # --- CLICKABLE SPORT BOXES ---
+        sport_options = {
+            "NBA 🏀": "basketball_nba",
+            "NHL 🏒": "icehockey_nhl",
+            "NFL 🏈": "americanfootball_nfl",
+            "MLB ⚾": "baseball_mlb",
+            "NCAAB 🏀🎓": "basketball_ncaab",
+            "NCAAF 🏈🎓": "americanfootball_ncaaf"
+        }
+        
+        selected_labels = st.multiselect(
+            "Select Sports to Scan (Each box uses 1 Credit)", 
+            options=list(sport_options.keys()),
+            default=["NBA 🏀", "NHL 🏒"]
+        )
+        
+        col4, _ = st.columns([1, 3])
         with col4:
             max_wager_raw = st.text_input("Wager ($)", value="50.0")
 
@@ -59,6 +72,8 @@ if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
         st.error("Missing API Key! Set ODDS_API_KEY in Streamlit Secrets.")
+    elif not selected_labels:
+        st.warning("Please select at least one sport box above to scan.")
     else:
         try:
             max_wager = float(max_wager_raw)
@@ -66,20 +81,15 @@ if run_scan:
         except:
             max_wager, boost_val = 50.0, 0.0
 
-        sport_map = {
-            "All Sports": ["basketball_nba", "americanfootball_nfl", "icehockey_nhl", "basketball_ncaab", "americanfootball_ncaaf"],
-            "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"], "NCAAF": ["americanfootball_ncaaf"]
-        }
-        
-        # Updated BOOK_LIST with internal API keys
         BOOK_LIST = "draftkings,fanduel,betmgm,bet365,williamhill_us,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
 
-        with st.spinner(f"Fetching {sport_cat} odds..."):
-            sports_to_scan = sport_map.get(sport_cat, [])
+        # Map labels to keys
+        sports_to_scan = [sport_options[label] for label in selected_labels]
+
+        with st.spinner(f"Scanning {len(sports_to_scan)} markets..."):
             for sport in sports_to_scan:
-                # API uses 'us' region for MGM/DraftKings/FanDuel
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
                 
@@ -91,7 +101,6 @@ if run_scan:
                     if res.status_code == 200:
                         games = res.json()
                         for game in games:
-                            # Filter out games that already started
                             commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                             if commence_time <= now_utc: continue 
                             
@@ -102,26 +111,18 @@ if run_scan:
                                 for market in book['markets']:
                                     for o in market['outcomes']:
                                         entry = {'book': book['title'], 'key': book['key'], 'team': o['name'], 'price': o['price']}
-                                        
-                                        # logic to separate source book and hedge book
                                         if book['key'] == source_book:
                                             source_odds.append(entry)
                                         else:
-                                            # Apply the Hedge Filter logic
                                             if hedge_filter == "allbooks" or book['key'] == hedge_filter:
                                                 hedge_odds.append(entry)
 
                             for s in source_odds:
-                                # Find opponent team
                                 opp_team = [t for t in [game['home_team'], game['away_team']] if t != s['team']][0]
                                 eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
-                                
                                 if not eligible_hedges: continue
                                 
-                                # Pick best price among eligible hedges
                                 best_h = max(eligible_hedges, key=lambda x: x['price'])
-                                
-                                # Convert American to Multiplier
                                 s_m = (s['price'] / 100) if s['price'] > 0 else (100 / abs(s['price']))
                                 h_m = (best_h['price'] / 100) if best_h['price'] > 0 else (100 / abs(best_h['price']))
 
@@ -140,8 +141,7 @@ if run_scan:
                                     profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
                                     rating = (profit / max_wager) * 100
 
-                                # Only add if it's actually an opportunity
-                                if profit > -5.0: # Show everything near-profitable for debugging
+                                if profit > -5.0:
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
                                         "sport": sport.split('_')[-1].upper(),
@@ -153,16 +153,14 @@ if run_scan:
                 except Exception as e:
                     st.error(f"Error on {sport}: {e}")
 
-        # --- RESULTS AREA (REVERTED TO ORIGINAL) ---
         st.write("### Top Scanned Opportunities")
         sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
         if not sorted_opps:
-            st.warning(f"No high-value matches found.")
+            st.warning(f"No high-value matches found in the selected sports.")
         else:
             for i, op in enumerate(sorted_opps[:10]):
-                sport_label = op['sport'].split('_')[-1].upper()
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-                title = f"RANK {i+1} | {sport_label} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
+                title = f"RANK {i+1} | {op['sport']} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
                 with st.expander(title):
                     st.write(f"**{op['game']}**")
                     c1, c2, c3 = st.columns(3)
@@ -216,9 +214,3 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
-
-
-
-
-
-
