@@ -50,24 +50,32 @@ with st.container():
         
         # --- HORIZONTAL SPORT CHECKBOXES WITH SELECT ALL ---
         st.write("**Select Sports to Scan:**")
-        sport_labels = ["NBA", "NHL", "NFL", "MLB", "NCAAB", "NCAAF"]
-        sport_keys = ["basketball_nba", "icehockey_nhl", "americanfootball_nfl", "baseball_mlb", "basketball_ncaab", "americanfootball_ncaaf"]
-        
-        # Create 7 columns (6 for sports, 1 for Select All)
-        sport_cols = st.columns(7)
-        selected_sports = []
-        
-        # 1. The Select All Toggle
-        with sport_cols[0]:
-            all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
+        sport_labels = ["NBA", "NHL", "NFL", "MLB", "NCAAB", "ATP", "WTA", "Aus Open (M)", "Aus Open (W)"]
+sport_keys = [
+    "basketball_nba", 
+    "icehockey_nhl", 
+    "americanfootball_nfl", 
+    "baseball_mlb", 
+    "basketball_ncaab", 
+    "tennis_atp", 
+    "tennis_wta",
+    "tennis_atp_aus_open_singles",
+    "tennis_wta_aus_open_singles"
+]
 
-        # 2. Individual Sports
-        for i in range(len(sport_labels)):
-            with sport_cols[i+1]:
-                # If "Select All" is checked, individual boxes default to True
-                is_checked = st.checkbox(sport_labels[i], value=all_clicked)
-                if is_checked:
-                    selected_sports.append(sport_keys[i])
+# Create columns dynamically (1 for Select All + the number of sports)
+sport_cols = st.columns(len(sport_labels) + 1)
+selected_sports = []
+
+with sport_cols[0]:
+    all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
+
+for i in range(len(sport_labels)):
+    with sport_cols[i+1]:
+        # If it's Jan 2026, we check the Aus Open boxes by default if "Select All" is on
+        is_checked = st.checkbox(sport_labels[i], value=all_clicked)
+        if is_checked:
+            selected_sports.append(sport_keys[i])
 
         st.divider()
         col_w, col_b = st.columns([1, 1])
@@ -222,3 +230,4 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
