@@ -153,30 +153,25 @@ if run_scan:
                 except Exception as e:
                     st.error(f"Error on {sport}: {e}")
 
-        # --- RESULTS AREA ---
+        # --- RESULTS AREA (REVERTED TO ORIGINAL) ---
         st.write("### Top Scanned Opportunities")
         if not all_opps:
-            st.warning(f"No results for {source_book_display} vs {hedge_book_display}. Try selecting 'All Books' for Hedge Filter.")
+            st.warning(f"No opportunities found.")
         else:
+            # Sort only by Profit/Rating
             sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
-            for i, op in enumerate(sorted_opps[:15]):
-                # Highlight if profitable
-                is_profitable = op['profit'] > 0
-                roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
+            
+            for op in sorted_opps[:15]:
+                # The original simple expander title
+                title = f"{op['game']} | {op['s_team']} @ {op['s_price']} | Profit: ${op['profit']:.2f}"
                 
-                title = f"{'✅' if is_profitable else '❌'} RANK {i+1} | {op['sport']} | +${op['profit']:.2f} ({roi:.1f}%)"
                 with st.expander(title):
-                    st.write(f"**{op['game']}** — *{op['time']}*")
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        st.caption(f"PROMO BOOK: {op['s_book'].upper()}")
-                        st.info(f"Bet **${max_wager:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
-                    with c2:
-                        st.caption(f"HEDGE BOOK: {op['h_book'].upper()}")
-                        st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
-                    with c3:
-                        st.metric("Expected Profit", f"${op['profit']:.2f}")
-                        st.caption(f"Strategy: {promo_type}")
+                    # Original simple text block instead of columns
+                    st.write(f"**Game:** {op['game']} ({op['time']})")
+                    st.write(f"**Source ({op['s_book']}):** Bet {op['s_team']} at {op['s_price']}")
+                    st.write(f"**Hedge ({op['h_book']}):** Bet {op['h_team']} at {op['h_price']}")
+                    st.write(f"**Hedge Amount:** ${op['hedge']}")
+                    st.write(f"**Net Profit:** ${op['profit']:.2f}")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
@@ -218,3 +213,4 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
