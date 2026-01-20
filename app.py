@@ -155,23 +155,26 @@ if run_scan:
 
         # --- RESULTS AREA (REVERTED TO ORIGINAL) ---
         st.write("### Top Scanned Opportunities")
-        if not all_opps:
-            st.warning(f"No opportunities found.")
+        sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
+        if not sorted_opps:
+            st.warning(f"No high-value matches found.")
         else:
-            # Sort only by Profit/Rating
-            sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
-            
-            for op in sorted_opps[:15]:
-                # The original simple expander title
-                title = f"{op['game']} | {op['s_team']} @ {op['s_price']} | Profit: ${op['profit']:.2f}"
-                
+            for i, op in enumerate(sorted_opps[:10]):
+                sport_label = op['sport'].split('_')[-1].upper()
+                roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
+                title = f"RANK {i+1} | {sport_label} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
                 with st.expander(title):
-                    # Original simple text block instead of columns
-                    st.write(f"**Game:** {op['game']} ({op['time']})")
-                    st.write(f"**Source ({op['s_book']}):** Bet {op['s_team']} at {op['s_price']}")
-                    st.write(f"**Hedge ({op['h_book']}):** Bet {op['h_team']} at {op['h_price']}")
-                    st.write(f"**Hedge Amount:** ${op['hedge']}")
-                    st.write(f"**Net Profit:** ${op['profit']:.2f}")
+                    st.write(f"**{op['game']}**")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        st.caption(f"SOURCE: {op['s_book'].upper()}")
+                        st.info(f"Bet **${max_wager:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
+                    with c2:
+                        st.caption(f"HEDGE: {op['h_book'].upper()}")
+                        st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
+                    with c3:
+                        st.metric("Net Profit", f"${op['profit']:.2f}")
+                        st.caption(f"Strategy: {promo_type}")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
@@ -213,4 +216,5 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
 
