@@ -41,7 +41,7 @@ with st.container():
             # Internal key mapping
             source_book = source_book_display.lower().replace(" ", "") 
         with col_hedge:
-            hedge_book_display = st.radio("Hedge Book (Filter)", ["All Books", "DraftKings", "FanDuel", "BetMGM", "theScore Bet"], horizontal=True)
+            hedge_book_display = st.radio("Hedge Book (Filter)", ["All Books", "DraftKings", "FanDuel", "BetMGM"], horizontal=True)
             hedge_filter = hedge_book_display.lower().replace(" ", "")
 
         st.divider()
@@ -216,6 +216,7 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
 
 
 
