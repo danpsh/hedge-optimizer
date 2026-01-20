@@ -20,8 +20,8 @@ st.markdown("""
     .stButton>button {
         background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
-    /* This style helps keep checkboxes tight */
-    .stCheckbox { margin-bottom: -15px; }
+    /* Reduces padding between the label and checkboxes */
+    .stCheckbox { margin-bottom: -10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -45,25 +45,19 @@ with st.container():
 
         st.divider()
         
-        # --- TRUE HORIZONTAL SPORT SELECTION ---
-        st.write("**Select Sports to Include in Scan:**")
-        sport_map = {
-            "NBA": "basketball_nba",
-            "NHL": "icehockey_nhl",
-            "NFL": "americanfootball_nfl",
-            "MLB": "baseball_mlb",
-            "NCAAB": "basketball_ncaab",
-            "NCAAF": "americanfootball_ncaaf"
-        }
+        # --- HORIZONTAL SPORT CHECKBOXES ---
+        st.write("**Select Sports to Scan:**")
+        # We create a column for every sport to force them onto one horizontal line
+        sport_labels = ["NBA", "NHL", "NFL", "MLB", "NCAAB", "NCAAF"]
+        sport_keys = ["basketball_nba", "icehockey_nhl", "americanfootball_nfl", "baseball_mlb", "basketball_ncaab", "americanfootball_ncaaf"]
         
-        # Create 6 thin columns to force them side-by-side
-        cols = st.columns(6)
+        sport_cols = st.columns(len(sport_labels))
         selected_sports = []
         
-        # Zip the labels and columns together to place one checkbox in each
-        for i, (label, api_key) in enumerate(sport_map.items()):
-            if cols[i].checkbox(label, value=False):
-                selected_sports.append(api_key)
+        for i in range(len(sport_labels)):
+            with sport_cols[i]:
+                if st.checkbox(sport_labels[i], value=False):
+                    selected_sports.append(sport_keys[i])
 
         st.divider()
         col_w, col_b = st.columns([1, 1])
@@ -80,7 +74,7 @@ if run_scan:
     if not api_key:
         st.error("Missing API Key! Set ODDS_API_KEY in Streamlit Secrets.")
     elif not selected_sports:
-        st.warning("Please check at least one sport box before running the scan.")
+        st.warning("Please select at least one sport above.")
     else:
         try:
             max_wager = float(max_wager_raw)
@@ -92,7 +86,7 @@ if run_scan:
         all_opps = []
         now_utc = datetime.now(timezone.utc)
 
-        with st.spinner(f"Scanning {len(selected_sports)} sports..."):
+        with st.spinner(f"Scanning {len(selected_sports)} markets..."):
             for sport in selected_sports:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
