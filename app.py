@@ -20,11 +20,13 @@ st.markdown("""
     .stButton>button {
         background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
-    .stCheckbox { margin-bottom: -10px; }
+    /* Keeps the sport row tight and horizontal */
+    .stCheckbox { margin-bottom: -10px; white-space: nowrap; }
+    div[data-testid="column"] { width: min-content !important; min-width: 90px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# Initialize Session State for the "Select All" toggle if it doesn't exist
+# Initialize Session State
 if 'select_all' not in st.session_state:
     st.session_state.select_all = False
 
@@ -48,34 +50,26 @@ with st.container():
 
         st.divider()
         
-        # --- HORIZONTAL SPORT CHECKBOXES WITH SELECT ALL ---
+        # --- HORIZONTAL SPORT SELECTION (INCLUDING AUS OPEN) ---
         st.write("**Select Sports to Scan:**")
-        sport_labels = ["NBA", "NHL", "NFL", "MLB", "NCAAB", "ATP", "WTA", "Aus Open (M)", "Aus Open (W)"]
-sport_keys = [
-    "basketball_nba", 
-    "icehockey_nhl", 
-    "americanfootball_nfl", 
-    "baseball_mlb", 
-    "basketball_ncaab", 
-    "tennis_atp", 
-    "tennis_wta",
-    "tennis_atp_aus_open_singles",
-    "tennis_wta_aus_open_singles"
-]
+        sport_labels = ["NBA", "NHL", "NFL", "NCAAB", "ATP", "WTA", "AusOpen(M)", "AusOpen(W)"]
+        sport_keys = [
+            "basketball_nba", "icehockey_nhl", "americanfootball_nfl", 
+            "basketball_ncaab", "tennis_atp", "tennis_wta",
+            "tennis_atp_aus_open_singles", "tennis_wta_aus_open_singles"
+        ]
+        
+        # Create columns: 1 for 'Select All' + number of sports
+        sport_cols = st.columns(len(sport_labels) + 1)
+        selected_sports = []
+        
+        with sport_cols[0]:
+            all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
 
-# Create columns dynamically (1 for Select All + the number of sports)
-sport_cols = st.columns(len(sport_labels) + 1)
-selected_sports = []
-
-with sport_cols[0]:
-    all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
-
-for i in range(len(sport_labels)):
-    with sport_cols[i+1]:
-        # If it's Jan 2026, we check the Aus Open boxes by default if "Select All" is on
-        is_checked = st.checkbox(sport_labels[i], value=all_clicked)
-        if is_checked:
-            selected_sports.append(sport_keys[i])
+        for i in range(len(sport_labels)):
+            with sport_cols[i+1]:
+                if st.checkbox(sport_labels[i], value=all_clicked):
+                    selected_sports.append(sport_keys[i])
 
         st.divider()
         col_w, col_b = st.columns([1, 1])
@@ -120,18 +114,15 @@ if run_scan:
                             commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                             if commence_time <= now_utc: continue 
                             
-                            source_odds = []
-                            hedge_odds = []
-                            
+                            source_odds, hedge_odds = [], []
                             for book in game['bookmakers']:
                                 for market in book['markets']:
                                     for o in market['outcomes']:
                                         entry = {'book': book['title'], 'key': book['key'], 'team': o['name'], 'price': o['price']}
                                         if book['key'] == source_book:
                                             source_odds.append(entry)
-                                        else:
-                                            if hedge_filter == "allbooks" or book['key'] == hedge_filter:
-                                                hedge_odds.append(entry)
+                                        elif hedge_filter == "allbooks" or book['key'] == hedge_filter:
+                                            hedge_odds.append(entry)
 
                             for s in source_odds:
                                 opp_team = [t for t in [game['home_team'], game['away_team']] if t != s['team']][0]
@@ -172,13 +163,12 @@ if run_scan:
         st.write("### Top Scanned Opportunities")
         sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
         if not sorted_opps:
-            st.warning(f"No high-value matches found.")
+            st.warning("No high-value matches found.")
         else:
-            for i, op in enumerate(sorted_opps[:10]):
+            for i, op in enumerate(sorted_opps[:15]):
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 title = f"RANK {i+1} | {op['sport']} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
                 with st.expander(title):
-                    st.write(f"**{op['game']}**")
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.caption(f"SOURCE: {op['s_book'].upper()}")
@@ -188,12 +178,12 @@ if run_scan:
                         st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
-                        st.caption(f"Strategy: {promo_type}")
+                        st.write(f"**{op['game']}**")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
 st.subheader("Manual Calculator")
-with st.expander("Open Manual Calculator", expanded=True):
+with st.expander("Open Manual Calculator", expanded=False):
     with st.form("manual_calc_form"):
         m_promo = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True, key="m_strat")
         m_col1, m_col2 = st.columns(2)
@@ -223,11 +213,9 @@ with st.expander("Open Manual Calculator", expanded=True):
                     m_h = round((mw * (ms_m + (1 - mc))) / (mh_m + 1))
                     m_p = min(((mw * ms_m) - m_h), ((m_h * mh_m) + (mw * mc) - mw))
                 
-                st.divider()
                 rc1, rc2, rc3 = st.columns(3)
                 rc1.metric("Hedge Amount", f"${m_h:.0f}")
                 rc2.metric("Net Profit", f"${m_p:.2f}")
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
-
