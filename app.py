@@ -44,7 +44,7 @@ with st.container():
 
         st.divider()
         
-        # --- CLICKABLE CHECKBOX LIST (NO AUTO-SELECT) ---
+        # --- GRID SPORT SELECTION (3 COLUMNS) ---
         st.write("**Select Sports to Include in Scan:**")
         sport_map = {
             "NBA": "basketball_nba",
@@ -55,22 +55,30 @@ with st.container():
             "NCAAF": "americanfootball_ncaaf"
         }
         
-        # Display checkboxes in a clean row
-        sport_cols = st.columns(len(sport_map))
+        # We create 3 columns to organize the 6 sports into a grid
+        scol1, scol2, scol3 = st.columns(3)
         selected_sports = []
         
-        for i, (label, api_key) in enumerate(sport_map.items()):
-            with sport_cols[i]:
-                # value=False ensures nothing is auto-selected
-                if st.checkbox(label, value=False):
-                    selected_sports.append(api_key)
+        # Map sports to specific columns to keep it tidy
+        items = list(sport_map.items())
+        
+        with scol1:
+            if st.checkbox(items[0][0], value=False): selected_sports.append(items[0][1]) # NBA
+            if st.checkbox(items[1][0], value=False): selected_sports.append(items[1][1]) # NHL
+        with scol2:
+            if st.checkbox(items[2][0], value=False): selected_sports.append(items[2][1]) # NFL
+            if st.checkbox(items[3][0], value=False): selected_sports.append(items[3][1]) # MLB
+        with scol3:
+            if st.checkbox(items[4][0], value=False): selected_sports.append(items[4][1]) # NCAAB
+            if st.checkbox(items[5][0], value=False): selected_sports.append(items[5][1]) # NCAAF
 
         st.divider()
-        col3, col4 = st.columns([3, 1])
-        with col4:
+        col_w, col_b = st.columns([1, 1])
+        with col_w:
             max_wager_raw = st.text_input("Wager ($)", value="50.0")
-
-        boost_val_raw = st.text_input("Boost (%)", value="50") if promo_type == "Profit Boost (%)" else "0"
+        with col_b:
+            boost_val_raw = st.text_input("Boost (%)", value="50") if promo_type == "Profit Boost (%)" else "0"
+            
         run_scan = st.form_submit_button("Run Optimizer", use_container_width=True)
 
 # --- SCAN LOGIC ---
