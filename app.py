@@ -20,7 +20,8 @@ st.markdown("""
     .stButton>button {
         background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
-    input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    /* This style helps keep checkboxes tight */
+    .stCheckbox { margin-bottom: -15px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -44,7 +45,7 @@ with st.container():
 
         st.divider()
         
-        # --- GRID SPORT SELECTION (3 COLUMNS) ---
+        # --- TRUE HORIZONTAL SPORT SELECTION ---
         st.write("**Select Sports to Include in Scan:**")
         sport_map = {
             "NBA": "basketball_nba",
@@ -55,22 +56,14 @@ with st.container():
             "NCAAF": "americanfootball_ncaaf"
         }
         
-        # We create 3 columns to organize the 6 sports into a grid
-        scol1, scol2, scol3 = st.columns(3)
+        # Create 6 thin columns to force them side-by-side
+        cols = st.columns(6)
         selected_sports = []
         
-        # Map sports to specific columns to keep it tidy
-        items = list(sport_map.items())
-        
-        with scol1:
-            if st.checkbox(items[0][0], value=False): selected_sports.append(items[0][1]) # NBA
-            if st.checkbox(items[1][0], value=False): selected_sports.append(items[1][1]) # NHL
-        with scol2:
-            if st.checkbox(items[2][0], value=False): selected_sports.append(items[2][1]) # NFL
-            if st.checkbox(items[3][0], value=False): selected_sports.append(items[3][1]) # MLB
-        with scol3:
-            if st.checkbox(items[4][0], value=False): selected_sports.append(items[4][1]) # NCAAB
-            if st.checkbox(items[5][0], value=False): selected_sports.append(items[5][1]) # NCAAF
+        # Zip the labels and columns together to place one checkbox in each
+        for i, (label, api_key) in enumerate(sport_map.items()):
+            if cols[i].checkbox(label, value=False):
+                selected_sports.append(api_key)
 
         st.divider()
         col_w, col_b = st.columns([1, 1])
