@@ -189,7 +189,7 @@ with st.expander("Open Manual Calculator", expanded=True):
             m_boost = st.text_input("Boost %", value="50") if m_promo == "Profit Boost (%)" else "0"
         with m_col2:
             m_h_price = st.text_input("Hedge Odds", value="-280")
-            m_conv = st.text_input("Refund %", value="70") if m_promo == "No-Sweat Bet" else "0"
+            m_conv = st.text_input("Refund %", value="65") if m_promo == "No-Sweat Bet" else "0"
         
         if st.form_submit_button("Calculate Hedge", use_container_width=True):
             try:
@@ -216,6 +216,7 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
 
 
 
