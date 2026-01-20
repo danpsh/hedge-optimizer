@@ -44,8 +44,9 @@ with st.container():
 
         st.divider()
         
-        # --- CLEAN US SPORT SELECTION (NO EMOJIS) ---
-        sport_options = {
+        # --- CLICKABLE CHECKBOX LIST (NO AUTO-SELECT) ---
+        st.write("**Select Sports to Include in Scan:**")
+        sport_map = {
             "NBA": "basketball_nba",
             "NHL": "icehockey_nhl",
             "NFL": "americanfootball_nfl",
@@ -54,13 +55,18 @@ with st.container():
             "NCAAF": "americanfootball_ncaaf"
         }
         
-        selected_labels = st.multiselect(
-            "Select Sports to Scan", 
-            options=list(sport_options.keys()),
-            default=["NBA", "NHL"]
-        )
+        # Display checkboxes in a clean row
+        sport_cols = st.columns(len(sport_map))
+        selected_sports = []
         
-        col4, _ = st.columns([1, 3])
+        for i, (label, api_key) in enumerate(sport_map.items()):
+            with sport_cols[i]:
+                # value=False ensures nothing is auto-selected
+                if st.checkbox(label, value=False):
+                    selected_sports.append(api_key)
+
+        st.divider()
+        col3, col4 = st.columns([3, 1])
         with col4:
             max_wager_raw = st.text_input("Wager ($)", value="50.0")
 
@@ -72,8 +78,8 @@ if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
         st.error("Missing API Key! Set ODDS_API_KEY in Streamlit Secrets.")
-    elif not selected_labels:
-        st.warning("Please select at least one sport to scan.")
+    elif not selected_sports:
+        st.warning("Please check at least one sport box before running the scan.")
     else:
         try:
             max_wager = float(max_wager_raw)
@@ -84,10 +90,9 @@ if run_scan:
         BOOK_LIST = "draftkings,fanduel,betmgm,bet365,williamhill_us,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
-        sports_to_scan = [sport_options[label] for label in selected_labels]
 
-        with st.spinner(f"Scanning {len(sports_to_scan)} markets..."):
-            for sport in sports_to_scan:
+        with st.spinner(f"Scanning {len(selected_sports)} sports..."):
+            for sport in selected_sports:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
                 
@@ -154,7 +159,7 @@ if run_scan:
         st.write("### Top Scanned Opportunities")
         sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
         if not sorted_opps:
-            st.warning(f"No high-value matches found in the selected sports.")
+            st.warning(f"No high-value matches found.")
         else:
             for i, op in enumerate(sorted_opps[:10]):
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
