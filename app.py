@@ -27,7 +27,7 @@ st.markdown("""
 # --- HEADER AREA ---
 st.title("Promo Converter")
 quota_placeholder = st.empty()
-quota_placeholder.markdown("**Quota:** :green[Not scanned yet]")
+quota_placeholder.markdown("**Quota:** Not scanned yet")
 
 # --- INPUT AREA ---
 with st.container():
@@ -44,20 +44,20 @@ with st.container():
 
         st.divider()
         
-        # --- CLICKABLE SPORT BOXES ---
+        # --- CLEAN US SPORT SELECTION (NO EMOJIS) ---
         sport_options = {
-            "NBA 🏀": "basketball_nba",
-            "NHL 🏒": "icehockey_nhl",
-            "NFL 🏈": "americanfootball_nfl",
-            "MLB ⚾": "baseball_mlb",
-            "NCAAB 🏀🎓": "basketball_ncaab",
-            "NCAAF 🏈🎓": "americanfootball_ncaaf"
+            "NBA": "basketball_nba",
+            "NHL": "icehockey_nhl",
+            "NFL": "americanfootball_nfl",
+            "MLB": "baseball_mlb",
+            "NCAAB": "basketball_ncaab",
+            "NCAAF": "americanfootball_ncaaf"
         }
         
         selected_labels = st.multiselect(
-            "Select Sports to Scan (Each box uses 1 Credit)", 
+            "Select Sports to Scan", 
             options=list(sport_options.keys()),
-            default=["NBA 🏀", "NHL 🏒"]
+            default=["NBA", "NHL"]
         )
         
         col4, _ = st.columns([1, 3])
@@ -73,7 +73,7 @@ if run_scan:
     if not api_key:
         st.error("Missing API Key! Set ODDS_API_KEY in Streamlit Secrets.")
     elif not selected_labels:
-        st.warning("Please select at least one sport box above to scan.")
+        st.warning("Please select at least one sport to scan.")
     else:
         try:
             max_wager = float(max_wager_raw)
@@ -84,8 +84,6 @@ if run_scan:
         BOOK_LIST = "draftkings,fanduel,betmgm,bet365,williamhill_us,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
-
-        # Map labels to keys
         sports_to_scan = [sport_options[label] for label in selected_labels]
 
         with st.spinner(f"Scanning {len(sports_to_scan)} markets..."):
@@ -96,7 +94,7 @@ if run_scan:
                 try:
                     res = requests.get(url, params=params)
                     quota_rem = res.headers.get('x-requests-remaining', 'N/A')
-                    quota_placeholder.markdown(f"**Quota Remaining:** :green[{quota_rem}]")
+                    quota_placeholder.markdown(f"**Quota Remaining:** {quota_rem}")
 
                     if res.status_code == 200:
                         games = res.json()
