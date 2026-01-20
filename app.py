@@ -20,10 +20,13 @@ st.markdown("""
     .stButton>button {
         background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
-    /* This style helps keep checkboxes tight */
-    .stCheckbox { margin-bottom: -15px; }
+    .stCheckbox { margin-bottom: -10px; }
     </style>
     """, unsafe_allow_html=True)
+
+# Initialize Session State for the "Select All" toggle if it doesn't exist
+if 'select_all' not in st.session_state:
+    st.session_state.select_all = False
 
 # --- HEADER AREA ---
 st.title("Promo Converter")
@@ -45,25 +48,26 @@ with st.container():
 
         st.divider()
         
-        # --- TRUE HORIZONTAL SPORT SELECTION ---
-        st.write("**Select Sports to Include in Scan:**")
-        sport_map = {
-            "NBA": "basketball_nba",
-            "NHL": "icehockey_nhl",
-            "NFL": "americanfootball_nfl",
-            "MLB": "baseball_mlb",
-            "NCAAB": "basketball_ncaab",
-            "NCAAF": "americanfootball_ncaaf"
-        }
+        # --- HORIZONTAL SPORT CHECKBOXES WITH SELECT ALL ---
+        st.write("**Select Sports to Scan:**")
+        sport_labels = ["NBA", "NHL", "NFL", "MLB", "NCAAB", "NCAAF"]
+        sport_keys = ["basketball_nba", "icehockey_nhl", "americanfootball_nfl", "baseball_mlb", "basketball_ncaab", "americanfootball_ncaaf"]
         
-        # Create 6 thin columns to force them side-by-side
-        cols = st.columns(6)
+        # Create 7 columns (6 for sports, 1 for Select All)
+        sport_cols = st.columns(7)
         selected_sports = []
         
-        # Zip the labels and columns together to place one checkbox in each
-        for i, (label, api_key) in enumerate(sport_map.items()):
-            if cols[i].checkbox(label, value=False):
-                selected_sports.append(api_key)
+        # 1. The Select All Toggle
+        with sport_cols[0]:
+            all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
+
+        # 2. Individual Sports
+        for i in range(len(sport_labels)):
+            with sport_cols[i+1]:
+                # If "Select All" is checked, individual boxes default to True
+                is_checked = st.checkbox(sport_labels[i], value=all_clicked)
+                if is_checked:
+                    selected_sports.append(sport_keys[i])
 
         st.divider()
         col_w, col_b = st.columns([1, 1])
@@ -80,7 +84,7 @@ if run_scan:
     if not api_key:
         st.error("Missing API Key! Set ODDS_API_KEY in Streamlit Secrets.")
     elif not selected_sports:
-        st.warning("Please check at least one sport box before running the scan.")
+        st.warning("Please select at least one sport above.")
     else:
         try:
             max_wager = float(max_wager_raw)
@@ -92,7 +96,7 @@ if run_scan:
         all_opps = []
         now_utc = datetime.now(timezone.utc)
 
-        with st.spinner(f"Scanning {len(selected_sports)} sports..."):
+        with st.spinner(f"Scanning {len(selected_sports)} markets..."):
             for sport in selected_sports:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
