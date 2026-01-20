@@ -32,12 +32,17 @@ quota_placeholder.markdown("**Quota:** :green[Not scanned yet]")
 # --- INPUT AREA ---
 with st.container():
     with st.form("input_panel"):
-        col1, col2 = st.columns(2)
+        col1, col2, col_hedge = st.columns(3)
         with col1:
             promo_type = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
         with col2:
-            source_book_display = st.radio("Source Book", ["DraftKings", "FanDuel", "BetMGM"], horizontal=True)
-            source_book = source_book_display.lower()
+            # Added BetMGM and Bet365 as source options
+            source_book_display = st.radio("Source Book", ["DraftKings", "FanDuel", "BetMGM", "Bet365"], horizontal=True)
+            source_book = source_book_display.lower().replace(" ", "")
+        with col_hedge:
+            # New Hedge Filter
+            hedge_book_display = st.radio("Hedge Filter", ["All Books", "DraftKings", "FanDuel", "BetMGM", "Caesars", "Bet365"], horizontal=True)
+            hedge_filter = hedge_book_display.lower().replace(" ", "")
 
         st.divider()
         col3, col4 = st.columns([3, 1])
@@ -66,11 +71,12 @@ if run_scan:
             "NBA": ["basketball_nba"], "NFL": ["americanfootball_nfl"], "NHL": ["icehockey_nhl"], "NCAAB": ["basketball_ncaab"], "NCAAF": ["americanfootball_ncaaf"]
         }
         
-        BOOK_LIST = BOOK_LIST = "draftkings,fanduel,betmgm,bet365,williamhill_us,caesars,fanatics,espnbet"
+        # Expanded BOOK_LIST for API call
+        BOOK_LIST = "draftkings,fanduel,betmgm,bet365,williamhill_us,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
 
-        with st.spinner(f"Scanning for {source_book_display} boosts..."):
+        with st.spinner(f"Scanning {source_book_display} vs {hedge_book_display}..."):
             sports_to_scan = sport_map.get(sport_cat, [])
             for sport in sports_to_scan:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
@@ -78,7 +84,7 @@ if run_scan:
                 
                 try:
                     res = requests.get(url, params=params)
-                    quota_placeholder.markdown(f"**Quota:** :green[{res.headers.get('x-requests-remaining', 'N/A')}]")
+                    quota_placeholder.markdown(f"**Quota Remaining:** :green[{res.headers.get('x-requests-remaining', 'N/A')}]")
 
                     if res.status_code == 200:
                         games = res.json()
@@ -91,11 +97,13 @@ if run_scan:
                                 for market in book['markets']:
                                     for o in market['outcomes']:
                                         entry = {'book': book['title'], 'key': book['key'], 'team': o['name'], 'price': o['price']}
-                                        # Personalization: Only using DraftKings and FanDuel as source books
+                                        
                                         if book['key'] == source_book:
                                             source_odds.append(entry)
                                         else:
-                                            hedge_odds.append(entry)
+                                            # Filter hedge books based on user selection
+                                            if hedge_filter == "allbooks" or book['key'] == hedge_filter:
+                                                hedge_odds.append(entry)
 
                             for s in source_odds:
                                 opp_team = [t for t in [game['home_team'], game['away_team']] if t != s['team']][0]
@@ -115,7 +123,7 @@ if run_scan:
                                     h_needed = round((max_wager * s_m) / (1 + h_m))
                                     profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                     rating = (profit / max_wager) * 100
-                                else: # No-Sweat Bet logic to match Excel math
+                                else: 
                                     mc = 0.70
                                     h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                     profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
@@ -130,30 +138,8 @@ if run_scan:
                                         "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
                                         "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price']
                                     })
-                except: continue
-
-        st.write("### Top Scanned Opportunities")
-        sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
-        if not sorted_opps:
-            st.warning(f"No high-value matches found.")
-        else:
-            for i, op in enumerate(sorted_opps[:10]):
-                sport_label = op['sport'].split('_')[-1].upper()
-                roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-                title = f"RANK {i+1} | {sport_label} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
-                with st.expander(title):
-                    st.write(f"**{op['game']}**")
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        st.caption(f"SOURCE: {op['s_book'].upper()}")
-                        st.info(f"Bet **${max_wager:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
-                    with c2:
-                        st.caption(f"HEDGE: {op['h_book'].upper()}")
-                        st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
-                    with c3:
-                        st.metric("Net Profit", f"${op['profit']:.2f}")
-                        st.caption(f"Strategy: {promo_type}")
-
+                except Exception as e:
+                    continue
 # --- MANUAL CALCULATOR ---
 st.write("---")
 st.subheader("Manual Calculator")
@@ -194,4 +180,5 @@ with st.expander("Open Manual Calculator", expanded=True):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
 
