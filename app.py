@@ -20,9 +20,9 @@ st.markdown("""
     .stButton>button {
         background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
-    /* Keeps the sport row tight and horizontal */
+    /* Adjusted for more sport columns */
     .stCheckbox { margin-bottom: -10px; white-space: nowrap; }
-    div[data-testid="column"] { width: min-content !important; min-width: 90px !important; }
+    div[data-testid="column"] { width: min-content !important; min-width: 85px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -50,16 +50,16 @@ with st.container():
 
         st.divider()
         
-        # --- HORIZONTAL SPORT SELECTION (INCLUDING AUS OPEN) ---
+        # --- HORIZONTAL SPORT SELECTION (UPDATED FOR MMA) ---
         st.write("**Select Sports to Scan:**")
-        sport_labels = ["NBA", "NHL", "NFL", "NCAAB", "ATP", "WTA", "AusOpen(M)", "AusOpen(W)"]
+        sport_labels = ["NBA", "NHL", "NFL", "NCAAB", "ATP", "WTA", "MMA", "AusOpen(M)", "AusOpen(W)"]
         sport_keys = [
             "basketball_nba", "icehockey_nhl", "americanfootball_nfl", 
             "basketball_ncaab", "tennis_atp", "tennis_wta",
+            "mma_mixed_martial_arts", # The Odds API Key for MMA/UFC
             "tennis_atp_aus_open_singles", "tennis_wta_aus_open_singles"
         ]
         
-        # Create columns: 1 for 'Select All' + number of sports
         sport_cols = st.columns(len(sport_labels) + 1)
         selected_sports = []
         
@@ -149,9 +149,12 @@ if run_scan:
                                     rating = (profit / max_wager) * 100
 
                                 if profit > -5.0:
+                                    # Logic to show "MMA" instead of "ARTS" in the UI
+                                    sport_display = "MMA" if "mma" in sport else sport.split('_')[-1].upper()
+                                    
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
-                                        "sport": sport.split('_')[-1].upper(),
+                                        "sport": sport_display,
                                         "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
                                         "profit": profit, "hedge": h_needed, "rating": rating,
                                         "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
