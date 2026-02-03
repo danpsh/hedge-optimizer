@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arb Terminal", layout="wide")
 
-# --- LIGHT TECH THEME (Updated CSS to remove highlight shading) ---
+# --- LIGHT TECH THEME ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
@@ -17,21 +17,15 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     
-    /* REMOVE WEIRD SHADING: This targets the inner text blocks in the expander header */
+    /* REMOVE SHADING: Target all text elements in the header to force transparent backgrounds */
     div[data-testid="stExpander"] p, 
     div[data-testid="stExpander"] span, 
-    div[data-testid="stExpander"] code {
+    div[data-testid="stExpander"] code,
+    div[data-testid="stExpander"] div {
         background-color: transparent !important;
         background: none !important;
         border: none !important;
         box-shadow: none !important;
-        color: #1e1e1e !important;
-    }
-
-    /* Target specifically the highlighted values to ensure they are green but not shaded */
-    [data-testid="stExpander"] b {
-        color: #008f51 !important;
-        background: transparent !important;
     }
 
     [data-testid="stMetricValue"] { 
@@ -54,7 +48,6 @@ if 'select_all' not in st.session_state:
 # --- HEADER AREA ---
 st.title("Promo Converter")
 quota_placeholder = st.empty()
-last_scan_placeholder = st.empty()
 quota_placeholder.markdown("**Quota:** Not scanned yet")
 
 # --- INPUT AREA ---
@@ -125,7 +118,6 @@ if run_scan:
         BOOK_LIST = "draftkings,fanduel,betmgm,bet365,williamhill_us,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
-        last_scan_placeholder.markdown(f"*Last Scan: {now_utc.strftime('%I:%M:%S %p UTC')}*")
 
         with st.spinner(f"Scanning {len(selected_sports)} markets..."):
             for sport in selected_sports:
@@ -206,8 +198,8 @@ if run_scan:
                 dot = "🟢" if hedge_rank < 3 else "🟡" if hedge_rank < 6 else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # Removed the code/backtick syntax and used plain text to avoid the shading
-                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: {op['hedge']:.0f}"
+                # Added $ sign to Hedge amount below
+                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title):
                     c1, c2, c3 = st.columns(3)
