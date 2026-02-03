@@ -50,26 +50,29 @@ with st.container():
 
         st.divider()
         
-        # --- HORIZONTAL SPORT SELECTION (UPDATED FOR MMA) ---
-        st.write("**Select Sports to Scan:**")
-        sport_labels = ["NBA", "NHL", "NFL", "NCAAB", "ATP", "WTA", "MMA", "AusOpen(M)", "AusOpen(W)"]
-        sport_keys = [
-            "basketball_nba", "icehockey_nhl", "americanfootball_nfl", 
-            "basketball_ncaab", "tennis_atp", "tennis_wta",
-            "mma_mixed_martial_arts", # The Odds API Key for MMA/UFC
-            "tennis_atp_aus_open_singles", "tennis_wta_aus_open_singles"
-        ]
-        
-        sport_cols = st.columns(len(sport_labels) + 1)
-        selected_sports = []
-        
-        with sport_cols[0]:
-            all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
+        # --- HORIZONTAL SPORT SELECTION (NBA, NCAAB, NHL, MMA) ---
+st.write("**Select Sports to Scan:**")
 
-        for i in range(len(sport_labels)):
-            with sport_cols[i+1]:
-                if st.checkbox(sport_labels[i], value=all_clicked):
-                    selected_sports.append(sport_keys[i])
+# Precise mapping for your core 4
+sports_map = {
+    "NBA": "basketball_nba",
+    "NCAAB": "basketball_ncaab",
+    "NHL": "icehockey_nhl",
+    "MMA": "mma_mixed_martial_arts"
+}
+
+sport_labels = list(sports_map.keys())
+selected_sports = []
+
+# Select All Logic
+all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
+
+# Display in a clean 4-column row
+sport_cols = st.columns(len(sport_labels))
+for i, label in enumerate(sport_labels):
+    with sport_cols[i]:
+        if st.checkbox(label, value=all_clicked, key=f"cb_{label}"):
+            selected_sports.append(sports_map[label])
 
         st.divider()
         col_w, col_b = st.columns([1, 1])
@@ -222,3 +225,4 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
