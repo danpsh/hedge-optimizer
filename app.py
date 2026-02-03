@@ -5,19 +5,20 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arb Terminal", layout="wide", page_icon="📈")
 
-# --- LIGHT TECH THEME (With Custom Header Styling) ---
+# --- LIGHT TECH THEME (With Monospace Header Style) ---
 st.markdown("""
     <style>
+    /* Global Background and Text */
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
     
-    /* Style the Expander Container */
+    /* Custom Expander Design */
     div[data-testid="stExpander"] {
         background-color: #ffffff; border: 1px solid #d1d5db;
         border-radius: 12px; margin-bottom: 12px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     
-    /* TARGET THE EXPANDER HEADER TEXT specifically */
+    /* STYLE THE EXPANDER HEADER: Force Monospace and Bold */
     div[data-testid="stExpander"] p {
         font-family: 'Courier New', monospace !important;
         font-weight: 800 !important;
@@ -25,19 +26,23 @@ st.markdown("""
         color: #1e1e1e !important;
     }
 
+    /* Metric Styling */
     [data-testid="stMetricValue"] { 
         color: #008f51 !important; font-family: 'Courier New', monospace; font-weight: 800;
     }
     
+    /* Button Styling */
     .stButton>button {
         background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
     
+    /* Alignment tweaks */
     .stCheckbox { margin-bottom: -10px; white-space: nowrap; }
+    div[data-testid="column"] { width: min-content !important; min-width: 85px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SESSION STATE FOR SELECT ALL ---
+# --- SESSION STATE LOGIC ---
 sports_map = {
     "NBA": "basketball_nba",
     "NCAAB": "basketball_ncaab",
@@ -48,11 +53,12 @@ sports_map = {
 if 'select_all' not in st.session_state:
     st.session_state.select_all = False
 
+# Callback to handle Select All checkbox
 def toggle_all_sports():
     for label in sports_map.keys():
         st.session_state[f"cb_{label}"] = st.session_state.all_sports_check
 
-# --- CACHED API FETCHING ---
+# --- CACHED API LOGIC ---
 @st.cache_data(ttl=60)
 def fetch_odds_cached(sport, api_key):
     url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
@@ -66,7 +72,7 @@ def fetch_odds_cached(sport, api_key):
     try:
         res = requests.get(url, params=params)
         return res
-    except Exception as e:
+    except:
         return None
 
 # --- HEADER AREA ---
@@ -81,8 +87,11 @@ with st.container():
         col1, col2, col_hedge = st.columns(3)
         
         book_map = {
-            "DraftKings": "draftkings", "FanDuel": "fanduel",
-            "BetMGM": "betmgm", "theScore / ESPN": "espnbet", "All Books": "allbooks"
+            "DraftKings": "draftkings",
+            "FanDuel": "fanduel",
+            "BetMGM": "betmgm",
+            "theScore / ESPN": "espnbet",
+            "All Books": "allbooks"
         }
 
         with col1:
@@ -109,9 +118,9 @@ with st.container():
         st.divider()
         col_w, col_b = st.columns(2)
         with col_w:
-            max_wager = st.number_input("Wager ($)", value=50.0, step=5.0)
+            max_wager_input = st.text_input("Wager ($)", value="50.0")
         with col_b:
-            boost_val = st.number_input("Boost (%)", value=50.0) if promo_type == "Profit Boost (%)" else 0.0
+            boost_val_input = st.text_input("Boost (%)", value="50") if promo_type == "Profit Boost (%)" else "0"
             
         run_scan = st.form_submit_button("Run Optimizer", use_container_width=True)
 
@@ -123,6 +132,12 @@ if run_scan:
     elif not selected_sports:
         st.warning("Please select at least one sport above.")
     else:
+        try:
+            max_wager = float(max_wager_input)
+            boost_val = float(boost_val_input)
+        except:
+            max_wager, boost_val = 50.0, 0.0
+
         all_opps = []
         now_utc = datetime.now(timezone.utc)
         last_scan_placeholder.markdown(f"*Last Scan: {now_utc.strftime('%I:%M:%S %p UTC')}*")
@@ -151,7 +166,10 @@ if run_scan:
                                         hedge_odds.append(entry)
 
                         for s in source_odds:
-                            opp_team = next((t for t in [game['home_team'], game['away_team']] if t != s['team']), None)
+                            teams = [game['home_team'], game['away_team']]
+                            if s['team'] not in teams: continue
+                            opp_team = [t for t in teams if t != s['team']][0]
+                            
                             eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
                             if not eligible_hedges: continue
                             
@@ -168,7 +186,7 @@ if run_scan:
                                 h_needed = round((max_wager * s_m) / (1 + h_m))
                                 profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                 rating = (profit / max_wager) * 100
-                            else: # No-Sweat
+                            else: # No-Sweat Bet
                                 mc = 0.70
                                 h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                 profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
@@ -197,7 +215,6 @@ if run_scan:
                 dot = "🟢" if hedge_rank < 3 else "🟡" if hedge_rank < 6 else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # Original Summary Title
                 title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title):
