@@ -20,7 +20,6 @@ st.markdown("""
     .stButton>button {
         background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
-    /* Adjusted for more sport columns */
     .stCheckbox { margin-bottom: -10px; white-space: nowrap; }
     div[data-testid="column"] { width: min-content !important; min-width: 85px !important; }
     </style>
@@ -50,29 +49,26 @@ with st.container():
 
         st.divider()
         
-        # --- HORIZONTAL SPORT SELECTION (NBA, NCAAB, NHL, MMA) ---
-st.write("**Select Sports to Scan:**")
+        # --- SPORT SELECTION ---
+        st.write("**Select Sports to Scan:**")
+        sports_map = {
+            "NBA": "basketball_nba",
+            "NCAAB": "basketball_ncaab",
+            "NHL": "icehockey_nhl",
+            "MMA": "mma_mixed_martial_arts"
+        }
+        sport_labels = list(sports_map.keys())
+        selected_sports = []
 
-# Precise mapping for your core 4
-sports_map = {
-    "NBA": "basketball_nba",
-    "NCAAB": "basketball_ncaab",
-    "NHL": "icehockey_nhl",
-    "MMA": "mma_mixed_martial_arts"
-}
+        # "Select All" as a functional checkbox inside the form
+        all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
 
-sport_labels = list(sports_map.keys())
-selected_sports = []
-
-# Select All Logic
-all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
-
-# Display in a clean 4-column row
-sport_cols = st.columns(len(sport_labels))
-for i, label in enumerate(sport_labels):
-    with sport_cols[i]:
-        if st.checkbox(label, value=all_clicked, key=f"cb_{label}"):
-            selected_sports.append(sports_map[label])
+        sport_cols = st.columns(len(sport_labels))
+        for i, label in enumerate(sport_labels):
+            with sport_cols[i]:
+                # If "Select All" is checked, these default to True
+                if st.checkbox(label, value=all_clicked, key=f"cb_{label}"):
+                    selected_sports.append(sports_map[label])
 
         st.divider()
         col_w, col_b = st.columns([1, 1])
@@ -128,7 +124,11 @@ if run_scan:
                                             hedge_odds.append(entry)
 
                             for s in source_odds:
-                                opp_team = [t for t in [game['home_team'], game['away_team']] if t != s['team']][0]
+                                # Determine the opponent
+                                teams = [game['home_team'], game['away_team']]
+                                if s['team'] not in teams: continue # Safeguard for neutral names
+                                opp_team = [t for t in teams if t != s['team']][0]
+                                
                                 eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
                                 if not eligible_hedges: continue
                                 
@@ -152,7 +152,6 @@ if run_scan:
                                     rating = (profit / max_wager) * 100
 
                                 if profit > -5.0:
-                                    # Logic to show "MMA" instead of "ARTS" in the UI
                                     sport_display = "MMA" if "mma" in sport else sport.split('_')[-1].upper()
                                     
                                     all_opps.append({
@@ -225,4 +224,3 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
-
