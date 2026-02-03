@@ -170,27 +170,26 @@ if run_scan:
                     st.error(f"Error on {sport}: {e}")
 
         st.write("### Top Scanned Opportunities")
-        # Keep Rating as the primary sort
         top_10 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:10]
 
         if not top_10:
             st.warning("No high-value matches found.")
         else:
-            # Generate a sub-list sorted by hedge just to calculate the "Hedge Rank"
             top_10_by_hedge = sorted(top_10, key=lambda x: x['hedge'])
             
             for i, op in enumerate(top_10):
-                # Calculate color dot based on capital efficiency
                 hedge_rank = top_10_by_hedge.index(op)
                 if hedge_rank < 3:
-                    dot = "🟢" # Efficiency leaders
+                    dot = "🟢" 
                 elif hedge_rank < 6:
-                    dot = "🟡" # Mid-range capital
+                    dot = "🟡" 
                 else:
-                    dot = "🔴" # High capital requirement
+                    dot = "🔴" 
 
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-                title = f"{dot} Rank {i+1} | {op['sport']} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
+                
+                # --- HEADER UPDATED HERE ---
+                title = f"{dot} Rank {i+1} | {op['sport']} | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title):
                     c1, c2, c3 = st.columns(3)
@@ -203,6 +202,7 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.write(f"**{op['game']}**")
+                        st.caption(f"Starts: {op['time']}")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
