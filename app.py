@@ -39,7 +39,6 @@ with st.container():
     with st.form("input_panel"):
         col1, col2, col_hedge = st.columns(3)
         
-        # Book Mapping for theScore / ESPN Bet
         book_map = {
             "DraftKings": "draftkings",
             "FanDuel": "fanduel",
@@ -59,7 +58,6 @@ with st.container():
 
         st.divider()
         
-        # --- SPORT SELECTION ---
         st.write("**Select Sports to Scan:**")
         sports_map = {
             "NBA": "basketball_nba",
@@ -101,7 +99,6 @@ if run_scan:
         except:
             max_wager, boost_val = 50.0, 0.0
 
-        # Full book list for API to compare against
         BOOK_LIST = "draftkings,fanduel,betmgm,bet365,williamhill_us,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
@@ -109,7 +106,6 @@ if run_scan:
         with st.spinner(f"Scanning {len(selected_sports)} markets..."):
             for sport in selected_sports:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
-                # Regions us and us2 are combined to ensure espnbet/thescore are included
                 params = {'apiKey': api_key, 'regions': 'us,us2', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
                 
                 try:
@@ -128,10 +124,8 @@ if run_scan:
                                 for market in book['markets']:
                                     for o in market['outcomes']:
                                         entry = {'book': book['title'], 'key': book['key'], 'team': o['name'], 'price': o['price']}
-                                        # Check if this book is our designated Source
                                         if book['key'] == source_book:
                                             source_odds.append(entry)
-                                        # Check if this book fits our Hedge filter
                                         if hedge_filter == "allbooks" or book['key'] == hedge_filter:
                                             hedge_odds.append(entry)
 
@@ -156,7 +150,7 @@ if run_scan:
                                     h_needed = round((max_wager * s_m) / (1 + h_m))
                                     profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                     rating = (profit / max_wager) * 100
-                                else: # No-Sweat Bet
+                                else: 
                                     mc = 0.70
                                     h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                     profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
@@ -176,13 +170,28 @@ if run_scan:
                     st.error(f"Error on {sport}: {e}")
 
         st.write("### Top Scanned Opportunities")
-        sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
-        if not sorted_opps:
+        # Keep Rating as the primary sort
+        top_10 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:10]
+
+        if not top_10:
             st.warning("No high-value matches found.")
         else:
-            for i, op in enumerate(sorted_opps[:15]):
+            # Generate a sub-list sorted by hedge just to calculate the "Hedge Rank"
+            top_10_by_hedge = sorted(top_10, key=lambda x: x['hedge'])
+            
+            for i, op in enumerate(top_10):
+                # Calculate color dot based on capital efficiency
+                hedge_rank = top_10_by_hedge.index(op)
+                if hedge_rank < 3:
+                    dot = "🟢" # Efficiency leaders
+                elif hedge_rank < 6:
+                    dot = "🟡" # Mid-range capital
+                else:
+                    dot = "🔴" # High capital requirement
+
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-                title = f"RANK {i+1} | {op['sport']} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
+                title = f"{dot} Rank {i+1} | {op['sport']} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
+                
                 with st.expander(title):
                     c1, c2, c3 = st.columns(3)
                     with c1:
