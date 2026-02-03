@@ -170,14 +170,17 @@ if run_scan:
                     st.error(f"Error on {sport}: {e}")
 
         st.write("### Top Scanned Opportunities")
+        # Top 10 by Rating
         top_10 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:10]
 
         if not top_10:
             st.warning("No high-value matches found.")
         else:
+            # Sort Top 10 by hedge only to assign dot ranks
             top_10_by_hedge = sorted(top_10, key=lambda x: x['hedge'])
             
             for i, op in enumerate(top_10):
+                # Calculate color dot (relative to top 10 list)
                 hedge_rank = top_10_by_hedge.index(op)
                 if hedge_rank < 3:
                     dot = "🟢" 
@@ -188,7 +191,7 @@ if run_scan:
 
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # --- HEADER UPDATED HERE ---
+                # HEADER: Rank | Sport | Profit | ROI | Hedge
                 title = f"{dot} Rank {i+1} | {op['sport']} | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title):
