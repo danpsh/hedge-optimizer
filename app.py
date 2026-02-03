@@ -38,14 +38,24 @@ quota_placeholder.markdown("**Quota:** Not scanned yet")
 with st.container():
     with st.form("input_panel"):
         col1, col2, col_hedge = st.columns(3)
+        
+        # Book Mapping for theScore / ESPN Bet
+        book_map = {
+            "DraftKings": "draftkings",
+            "FanDuel": "fanduel",
+            "BetMGM": "betmgm",
+            "theScore / ESPN": "espnbet",
+            "All Books": "allbooks"
+        }
+
         with col1:
             promo_type = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
         with col2:
-            source_book_display = st.radio("Source Book (Promo)", ["DraftKings", "FanDuel", "BetMGM"], horizontal=True)
-            source_book = source_book_display.lower().replace(" ", "") 
+            source_book_display = st.radio("Source Book (Promo)", ["DraftKings", "FanDuel", "BetMGM", "theScore / ESPN"], horizontal=True)
+            source_book = book_map[source_book_display]
         with col_hedge:
-            hedge_book_display = st.radio("Hedge Book (Filter)", ["All Books", "DraftKings", "FanDuel", "BetMGM"], horizontal=True)
-            hedge_filter = hedge_book_display.lower().replace(" ", "")
+            hedge_book_display = st.radio("Hedge Book (Filter)", ["All Books", "DraftKings", "FanDuel", "BetMGM", "theScore / ESPN"], horizontal=True)
+            hedge_filter = book_map[hedge_book_display]
 
         st.divider()
         
@@ -60,13 +70,11 @@ with st.container():
         sport_labels = list(sports_map.keys())
         selected_sports = []
 
-        # "Select All" as a functional checkbox inside the form
         all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
 
         sport_cols = st.columns(len(sport_labels))
         for i, label in enumerate(sport_labels):
             with sport_cols[i]:
-                # If "Select All" is checked, these default to True
                 if st.checkbox(label, value=all_clicked, key=f"cb_{label}"):
                     selected_sports.append(sports_map[label])
 
@@ -93,6 +101,7 @@ if run_scan:
         except:
             max_wager, boost_val = 50.0, 0.0
 
+        # Full book list for API to compare against
         BOOK_LIST = "draftkings,fanduel,betmgm,bet365,williamhill_us,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
@@ -100,7 +109,8 @@ if run_scan:
         with st.spinner(f"Scanning {len(selected_sports)} markets..."):
             for sport in selected_sports:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
-                params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
+                # Regions us and us2 are combined to ensure espnbet/thescore are included
+                params = {'apiKey': api_key, 'regions': 'us,us2', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
                 
                 try:
                     res = requests.get(url, params=params)
@@ -118,15 +128,16 @@ if run_scan:
                                 for market in book['markets']:
                                     for o in market['outcomes']:
                                         entry = {'book': book['title'], 'key': book['key'], 'team': o['name'], 'price': o['price']}
+                                        # Check if this book is our designated Source
                                         if book['key'] == source_book:
                                             source_odds.append(entry)
-                                        elif hedge_filter == "allbooks" or book['key'] == hedge_filter:
+                                        # Check if this book fits our Hedge filter
+                                        if hedge_filter == "allbooks" or book['key'] == hedge_filter:
                                             hedge_odds.append(entry)
 
                             for s in source_odds:
-                                # Determine the opponent
                                 teams = [game['home_team'], game['away_team']]
-                                if s['team'] not in teams: continue # Safeguard for neutral names
+                                if s['team'] not in teams: continue
                                 opp_team = [t for t in teams if t != s['team']][0]
                                 
                                 eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
@@ -145,7 +156,7 @@ if run_scan:
                                     h_needed = round((max_wager * s_m) / (1 + h_m))
                                     profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                     rating = (profit / max_wager) * 100
-                                else: # No-Sweat
+                                else: # No-Sweat Bet
                                     mc = 0.70
                                     h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                     profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
@@ -153,7 +164,6 @@ if run_scan:
 
                                 if profit > -5.0:
                                     sport_display = "MMA" if "mma" in sport else sport.split('_')[-1].upper()
-                                    
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
                                         "sport": sport_display,
