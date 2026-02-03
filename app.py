@@ -32,6 +32,7 @@ if 'select_all' not in st.session_state:
 # --- HEADER AREA ---
 st.title("Promo Converter")
 quota_placeholder = st.empty()
+last_scan_placeholder = st.empty()
 quota_placeholder.markdown("**Quota:** Not scanned yet")
 
 # --- INPUT AREA ---
@@ -102,6 +103,7 @@ if run_scan:
         BOOK_LIST = "draftkings,fanduel,betmgm,bet365,williamhill_us,caesars,fanatics,espnbet"
         all_opps = []
         now_utc = datetime.now(timezone.utc)
+        last_scan_placeholder.markdown(f"*Last Scan: {now_utc.strftime('%I:%M:%S %p UTC')}*")
 
         with st.spinner(f"Scanning {len(selected_sports)} markets..."):
             for sport in selected_sports:
@@ -161,7 +163,7 @@ if run_scan:
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
                                         "sport": sport_display,
-                                        "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
+                                        "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M%p"),
                                         "profit": profit, "hedge": h_needed, "rating": rating,
                                         "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
                                         "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price']
@@ -170,17 +172,14 @@ if run_scan:
                     st.error(f"Error on {sport}: {e}")
 
         st.write("### Top Scanned Opportunities")
-        # Top 10 by Rating
         top_10 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:10]
 
         if not top_10:
             st.warning("No high-value matches found.")
         else:
-            # Sort Top 10 by hedge only to assign dot ranks
             top_10_by_hedge = sorted(top_10, key=lambda x: x['hedge'])
             
             for i, op in enumerate(top_10):
-                # Calculate color dot (relative to top 10 list)
                 hedge_rank = top_10_by_hedge.index(op)
                 if hedge_rank < 3:
                     dot = "🟢" 
@@ -191,8 +190,8 @@ if run_scan:
 
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # HEADER: Rank | Sport | Profit | ROI | Hedge
-                title = f"{dot} Rank {i+1} | {op['sport']} | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: ${op['hedge']:.0f}"
+                # HEADER: Rank | Sport | Date/Time | Profit | ROI | Hedge
+                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title):
                     c1, c2, c3 = st.columns(3)
@@ -205,7 +204,6 @@ if run_scan:
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.write(f"**{op['game']}**")
-                        st.caption(f"Starts: {op['time']}")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
