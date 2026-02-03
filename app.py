@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arb Terminal", layout="wide")
 
-# --- LIGHT TECH THEME ---
+# --- LIGHT TECH THEME (Ultra-Clean Fix) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
@@ -16,16 +16,21 @@ st.markdown("""
         border-radius: 12px; margin-bottom: 12px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    
-    /* REMOVE SHADING: Target all text elements in the header to force transparent backgrounds */
+
+    /* THE NUKE OPTION FOR SHADING: 
+       Targets all possible text/code wrappers in the header to kill backgrounds */
     div[data-testid="stExpander"] p, 
     div[data-testid="stExpander"] span, 
     div[data-testid="stExpander"] code,
-    div[data-testid="stExpander"] div {
+    div[data-testid="stExpander"] div,
+    .st-emotion-cache-p5msec,
+    .st-emotion-cache-16ids0d,
+    .st-emotion-cache-1wivap2 {
         background-color: transparent !important;
         background: none !important;
         border: none !important;
         box-shadow: none !important;
+        padding: 0 !important;
     }
 
     [data-testid="stMetricValue"] { 
@@ -198,8 +203,8 @@ if run_scan:
                 dot = "🟢" if hedge_rank < 3 else "🟡" if hedge_rank < 6 else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # Added $ sign to Hedge amount below
-                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: ${op['hedge']:.0f}"
+                # Removed decimal formatting in title to prevent Streamlit from thinking it's code
+                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title):
                     c1, c2, c3 = st.columns(3)
