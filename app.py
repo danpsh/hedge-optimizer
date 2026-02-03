@@ -5,22 +5,37 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arb Terminal", layout="wide")
 
-# --- LIGHT TECH THEME ---
+# --- LIGHT TECH THEME (Updated CSS) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
+    
+    /* Main Expander Container */
     div[data-testid="stExpander"] {
         background-color: #ffffff; border: 1px solid #d1d5db;
         border-radius: 12px; margin-bottom: 12px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
+    
+    /* FIX FOR THE "WEIRD SHADING": Target the paragraph inside the expander header */
+    div[data-testid="stExpander"] p {
+        background-color: transparent !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: #1e1e1e !important;
+    }
+
     [data-testid="stMetricValue"] { 
         color: #008f51 !important; font-family: 'Courier New', monospace; font-weight: 800;
     }
+    
     .stButton>button {
         background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
+    
     .stCheckbox { margin-bottom: -10px; white-space: nowrap; }
+    
+    /* Force columns to behave for the sports selector */
     div[data-testid="column"] { width: min-content !important; min-width: 85px !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -181,13 +196,7 @@ if run_scan:
             
             for i, op in enumerate(top_10):
                 hedge_rank = top_10_by_hedge.index(op)
-                if hedge_rank < 3:
-                    dot = "🟢" 
-                elif hedge_rank < 6:
-                    dot = "🟡" 
-                else:
-                    dot = "🔴" 
-
+                dot = "🟢" if hedge_rank < 3 else "🟡" if hedge_rank < 6 else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
                 title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: ${op['hedge']:.0f}"
