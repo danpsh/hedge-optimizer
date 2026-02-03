@@ -190,7 +190,7 @@ if run_scan:
 
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # HEADER: Rank | Sport | Date/Time | Profit | ROI | Hedge
+                # The Header format as requested
                 title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title):
