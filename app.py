@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arb Terminal", layout="wide")
 
-# --- LIGHT TECH THEME (Updated CSS) ---
+# --- LIGHT TECH THEME (Updated CSS to remove highlight shading) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
@@ -17,12 +17,21 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     
-    /* FIX FOR THE "WEIRD SHADING": Target the paragraph inside the expander header */
-    div[data-testid="stExpander"] p {
+    /* REMOVE WEIRD SHADING: This targets the inner text blocks in the expander header */
+    div[data-testid="stExpander"] p, 
+    div[data-testid="stExpander"] span, 
+    div[data-testid="stExpander"] code {
         background-color: transparent !important;
-        margin: 0 !important;
-        padding: 0 !important;
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
         color: #1e1e1e !important;
+    }
+
+    /* Target specifically the highlighted values to ensure they are green but not shaded */
+    [data-testid="stExpander"] b {
+        color: #008f51 !important;
+        background: transparent !important;
     }
 
     [data-testid="stMetricValue"] { 
@@ -34,8 +43,6 @@ st.markdown("""
     }
     
     .stCheckbox { margin-bottom: -10px; white-space: nowrap; }
-    
-    /* Force columns to behave for the sports selector */
     div[data-testid="column"] { width: min-content !important; min-width: 85px !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -199,7 +206,8 @@ if run_scan:
                 dot = "🟢" if hedge_rank < 3 else "🟡" if hedge_rank < 6 else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: ${op['hedge']:.0f}"
+                # Removed the code/backtick syntax and used plain text to avoid the shading
+                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | +${op['profit']:.2f} ({roi:.1f}%) | Hedge: {op['hedge']:.0f}"
                 
                 with st.expander(title):
                     c1, c2, c3 = st.columns(3)
