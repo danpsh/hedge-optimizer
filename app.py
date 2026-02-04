@@ -146,7 +146,7 @@ if run_scan:
                                 h_needed = round((max_wager * s_m) / (1 + h_m))
                                 profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                 rating = (profit / max_wager) * 100
-                            else: # No-Sweat Calculation (Restored)
+                            else: # No-Sweat Math
                                 mc = 0.70
                                 h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                 profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
@@ -163,25 +163,23 @@ if run_scan:
                                     "h_team": best_h['team'], "h_book": best_h['book_name'], "h_price": best_h['price']
                                 })
 
-        st.write("### Top Scanned Opportunities")
-        # Primary Sort by Profit/Rating
-        top_10 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:10]
+        st.write("### Top 6 Opportunities (3 Green / 3 Red)")
+        # 1. Primary Sort by Profit
+        top_6 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:6]
 
-        # Calculate Hedge Rankings for Dots
-        if top_10:
-            all_hedge_vals = sorted([op['hedge'] for op in top_10])
-            green_threshold = all_hedge_vals[min(2, len(all_hedge_vals)-1)]
-            yellow_threshold = all_hedge_vals[min(6, len(all_hedge_vals)-1)]
+        # 2. Determine thresholds for 3 Green / 3 Red split
+        if len(top_6) >= 1:
+            all_hedge_vals = sorted([op['hedge'] for op in top_6])
+            # The 3rd lowest value determines the green cutoff
+            green_cutoff = all_hedge_vals[min(2, len(all_hedge_vals)-1)]
 
-        for i, op in enumerate(top_10):
-            # Assign Dot
-            if op['hedge'] <= green_threshold: dot = "🟢"
-            elif op['hedge'] <= yellow_threshold: dot = "🟡"
-            else: dot = "🔴"
+        for i, op in enumerate(top_6):
+            # 3. Assign Dot (3 Lowest Hedge = Green, rest = Red)
+            dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
 
             roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
             
-            # The backslash \ before $ and % prevents grey background shading
+            # 4. Escaped Title to prevent grey shading
             title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: \${op['profit']:.2f} ({int(roi)}\%) | Hedge: \${op['hedge']:.0f}"
             
             with st.expander(title):
