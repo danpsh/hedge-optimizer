@@ -171,7 +171,7 @@ if run_scan:
             roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
             
             # EXACT FORMAT: Rank 1 | NBA (02/03 07:30PM) | Profit: $22.50 (45%) | Hedge: $56
-            title = f"Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
+            title = f"Rank {i+1} | {op['sport']} ({op['time']}) | Profit: <span>$</span>{op['profit']:.2f} ({int(roi)}<span>%</span>) | Hedge: <span>$</span>{op['hedge']:.0f}"
             
             with st.expander(title):
                 c1, c2, c3 = st.columns(3)
@@ -224,4 +224,5 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
 
