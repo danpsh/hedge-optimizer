@@ -163,7 +163,7 @@ if run_scan:
                                     "h_team": best_h['team'], "h_book": best_h['book_name'], "h_price": best_h['price']
                                 })
 
-        st.write("### Top 6 Opportunities (3 Green / 3 Red)")
+        st.write("### Top 6 Opportunities")
         # 1. Primary Sort by Profit
         top_6 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:6]
 
@@ -233,3 +233,4 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
