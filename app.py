@@ -167,9 +167,12 @@ if run_scan:
         top_10 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:10]
 
         for i, op in enumerate(top_10):
+            # Calculate ROI for the title string
             roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-            # Removed backticks to avoid Streamlit code shading
+            
+            # EXACT FORMAT: Rank 1 | NBA (02/03 07:30PM) | Profit: $22.50 (45%) | Hedge: $56
             title = f"Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
+            
             with st.expander(title):
                 c1, c2, c3 = st.columns(3)
                 with c1:
@@ -221,3 +224,4 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
