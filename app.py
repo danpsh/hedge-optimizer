@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arb Terminal", layout="wide")
 
-# --- LIGHT TECH THEME (Simplified CSS) ---
+# --- LIGHT TECH THEME ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
@@ -88,7 +88,7 @@ with st.container():
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
-        st.error("Missing API Key!")
+        st.error("Missing API Key! Please set ODDS_API_KEY in your secrets.")
     elif not selected_sports:
         st.warning("Please select at least one sport.")
     else:
@@ -115,13 +115,24 @@ if run_scan:
                         commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                         if commence_time <= now_utc: continue 
                         
-                        source_odds = [o for b in game['bookmakers'] if b['key'] == source_book for m in b['markets'] for o in m['outcomes']]
-                        hedge_odds = [o for b in game['bookmakers'] if (hedge_filter == "allbooks" or b['key'] == hedge_filter) for m in b['markets'] for o in m['outcomes']]
+                        source_odds = []
+                        hedge_odds = []
+
+                        for book in game['bookmakers']:
+                            for market in book['markets']:
+                                for o in market['outcomes']:
+                                    entry = {'book_name': book['title'], 'team': o['name'], 'price': o['price']}
+                                    if book['key'] == source_book:
+                                        source_odds.append(entry)
+                                    if hedge_filter == "allbooks" or book['key'] == hedge_filter:
+                                        hedge_odds.append(entry)
 
                         for s in source_odds:
                             opp_team = next((t for t in [game['home_team'], game['away_team']] if t != s['team']), None)
-                            best_h = max([h for h in hedge_odds if h['team'] == opp_team], key=lambda x: x['price'], default=None)
-                            if not best_h: continue
+                            eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
+                            if not eligible_hedges: continue
+                            
+                            best_h = max(eligible_hedges, key=lambda x: x['price'])
                             
                             s_m = (s['price'] / 100) if s['price'] > 0 else (100 / abs(s['price']))
                             h_m = (best_h['price'] / 100) if best_h['price'] > 0 else (100 / abs(best_h['price']))
@@ -135,7 +146,7 @@ if run_scan:
                                 h_needed = round((max_wager * s_m) / (1 + h_m))
                                 profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                 rating = (profit / max_wager) * 100
-                            else: 
+                            else: # No-Sweat
                                 mc = 0.70
                                 h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                 profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
@@ -148,8 +159,8 @@ if run_scan:
                                     "sport": sport_display,
                                     "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M%p"),
                                     "profit": profit, "hedge": h_needed, "rating": rating,
-                                    "s_team": s['team'], "s_book": source_book, "s_price": s['price'],
-                                    "h_team": best_h['team'], "h_book": best_h['name'] if 'name' in best_h else "Hedge Book", "h_price": best_h['price']
+                                    "s_team": s['team'], "s_book": s['book_name'], "s_price": s['price'],
+                                    "h_team": best_h['team'], "h_book": best_h['book_name'], "h_price": best_h['price']
                                 })
 
         st.write("### Top Scanned Opportunities")
@@ -157,14 +168,19 @@ if run_scan:
 
         for i, op in enumerate(top_10):
             roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-            # Clean string title to prevent grey shading
+            # Removed backticks to avoid Streamlit code shading
             title = f"Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
             with st.expander(title):
                 c1, c2, c3 = st.columns(3)
-                c1.info(f"Bet ${max_wager:.0f} on {op['s_team']} @ {op['s_price']:+}")
-                c2.success(f"Bet ${op['hedge']:.0f} on {op['h_team']} @ {op['h_price']:+}")
-                c3.metric("Net Profit", f"${op['profit']:.2f}")
-                st.write(f"**{op['game']}**")
+                with c1:
+                    st.caption(f"SOURCE: {op['s_book'].upper()}")
+                    st.info(f"Bet ${max_wager:.0f} on {op['s_team']} @ {op['s_price']:+}")
+                with c2:
+                    st.caption(f"HEDGE: {op['h_book'].upper()}")
+                    st.success(f"Bet ${op['hedge']:.0f} on {op['h_team']} @ {op['h_price']:+}")
+                with c3:
+                    st.metric("Net Profit", f"${op['profit']:.2f}")
+                    st.write(f"**{op['game']}**")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
@@ -203,4 +219,5 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc1.metric("Hedge Amount", f"${m_h:.0f}")
                 rc2.metric("Net Profit", f"${m_p:.2f}")
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
-            except: st.error("Invalid numbers.")
+            except: 
+                st.error("Please enter valid numbers.")
