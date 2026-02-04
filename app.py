@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arb Terminal", layout="wide")
 
-# --- LIGHT TECH THEME ---
+# --- LIGHT TECH THEME (Minimal CSS) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
@@ -88,7 +88,7 @@ with st.container():
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
-        st.error("Missing API Key! Please set ODDS_API_KEY in your secrets.")
+        st.error("Missing API Key!")
     elif not selected_sports:
         st.warning("Please select at least one sport.")
     else:
@@ -138,25 +138,25 @@ if run_scan:
                             h_m = (best_h['price'] / 100) if best_h['price'] > 0 else (100 / abs(best_h['price']))
 
                             if promo_type == "Profit Boost (%)":
-                                boosted_s_m = s_m * (1 + (boost_val / 100))
-                                h_needed = round((max_wager * (1 + boosted_s_m)) / (1 + h_m))
-                                profit = min(((max_wager * boosted_s_m) - h_needed), ((h_needed * h_m) - max_wager))
+                                b_s_m = s_m * (1 + (boost_val / 100))
+                                h_needed = round((max_wager * (1 + b_s_m)) / (1 + h_m))
+                                profit = min(((max_wager * b_s_m) - h_needed), ((h_needed * h_m) - max_wager))
                                 rating = profit
                             elif promo_type == "Bonus Bet":
                                 h_needed = round((max_wager * s_m) / (1 + h_m))
                                 profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                 rating = (profit / max_wager) * 100
-                            else: # No-Sweat
+                            else: 
                                 mc = 0.70
                                 h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                 profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
                                 rating = (profit / max_wager) * 100
 
                             if profit > -5.0:
-                                sport_display = "MMA" if "mma" in sport else sport.split('_')[-1].upper()
+                                s_display = "MMA" if "mma" in sport else sport.split('_')[-1].upper()
                                 all_opps.append({
                                     "game": f"{game['away_team']} vs {game['home_team']}",
-                                    "sport": sport_display,
+                                    "sport": s_display,
                                     "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M%p"),
                                     "profit": profit, "hedge": h_needed, "rating": rating,
                                     "s_team": s['team'], "s_book": s['book_name'], "s_price": s['price'],
@@ -167,11 +167,10 @@ if run_scan:
         top_10 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:10]
 
         for i, op in enumerate(top_10):
-            # Calculate ROI for the title string
             roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
             
-            # EXACT FORMAT: Rank 1 | NBA (02/03 07:30PM) | Profit: $22.50 (45%) | Hedge: $56
-            title = f"Rank {i+1} | {op['sport']} ({op['time']}) | Profit: <span>$</span>{op['profit']:.2f} ({int(roi)}<span>%</span>) | Hedge: <span>$</span>{op['hedge']:.0f}"
+            # The backslash \ before $ and % prevents grey background shading
+            title = f"Rank {i+1} | {op['sport']} ({op['time']}) | Profit: \${op['profit']:.2f} ({int(roi)}\%) | Hedge: \${op['hedge']:.0f}"
             
             with st.expander(title):
                 c1, c2, c3 = st.columns(3)
@@ -193,28 +192,28 @@ with st.expander("Open Manual Calculator", expanded=False):
         m_promo = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True, key="m_strat")
         m_col1, m_col2 = st.columns(2)
         with m_col1:
-            m_s_price = st.text_input("Source Odds", value="250")
-            m_wager = st.text_input("Wager ($)", value="50.0")
-            m_boost = st.text_input("Boost %", value="50") if m_promo == "Profit Boost (%)" else "0"
+            m_s_p = st.text_input("Source Odds", value="250")
+            m_w = st.text_input("Wager ($)", value="50.0")
+            m_b = st.text_input("Boost %", value="50") if m_promo == "Profit Boost (%)" else "0"
         with m_col2:
-            m_h_price = st.text_input("Hedge Odds", value="-280")
-            m_conv = st.text_input("Refund %", value="70") if m_promo == "No-Sweat Bet" else "0"
+            m_h_p = st.text_input("Hedge Odds", value="-280")
+            m_c = st.text_input("Refund %", value="70") if m_promo == "No-Sweat Bet" else "0"
         
         if st.form_submit_button("Calculate Hedge", use_container_width=True):
             try:
-                ms_p, mw, mh_p = float(m_s_price), float(m_wager), float(m_h_price)
+                ms_p, mw, mh_p = float(m_s_p), float(m_w), float(m_h_p)
                 ms_m = (ms_p / 100) if ms_p > 0 else (100 / abs(ms_p))
                 mh_m = (mh_p / 100) if mh_p > 0 else (100 / abs(mh_p))
                 
                 if m_promo == "Profit Boost (%)":
-                    boosted_m = ms_m * (1 + float(m_boost)/100)
+                    boosted_m = ms_m * (1 + float(m_b)/100)
                     m_h = round((mw * (1 + boosted_m)) / (1 + mh_m))
                     m_p = min(((mw * boosted_m) - m_h), ((m_h * mh_m) - mw))
                 elif m_promo == "Bonus Bet":
                     m_h = round((mw * ms_m) / (1 + mh_m))
                     m_p = min(((mw * ms_m) - m_h), (m_h * mh_m))
                 else: 
-                    mc = float(m_conv)/100 
+                    mc = float(m_c)/100 
                     m_h = round((mw * (ms_m + (1 - mc))) / (mh_m + 1))
                     m_p = min(((mw * ms_m) - m_h), ((m_h * mh_m) + (mw * mc) - mw))
                 
@@ -224,5 +223,3 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
-
-
