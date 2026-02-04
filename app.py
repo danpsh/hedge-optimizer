@@ -146,7 +146,7 @@ if run_scan:
                                 h_needed = round((max_wager * s_m) / (1 + h_m))
                                 profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                 rating = (profit / max_wager) * 100
-                            else: 
+                            else: # No-Sweat Calculation (Restored)
                                 mc = 0.70
                                 h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                 profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
@@ -164,13 +164,25 @@ if run_scan:
                                 })
 
         st.write("### Top Scanned Opportunities")
+        # Primary Sort by Profit/Rating
         top_10 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:10]
 
+        # Calculate Hedge Rankings for Dots
+        if top_10:
+            all_hedge_vals = sorted([op['hedge'] for op in top_10])
+            green_threshold = all_hedge_vals[min(2, len(all_hedge_vals)-1)]
+            yellow_threshold = all_hedge_vals[min(6, len(all_hedge_vals)-1)]
+
         for i, op in enumerate(top_10):
+            # Assign Dot
+            if op['hedge'] <= green_threshold: dot = "🟢"
+            elif op['hedge'] <= yellow_threshold: dot = "🟡"
+            else: dot = "🔴"
+
             roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
             
             # The backslash \ before $ and % prevents grey background shading
-            title = f"Rank {i+1} | {op['sport']} ({op['time']}) | Profit: \${op['profit']:.2f} ({int(roi)}\%) | Hedge: \${op['hedge']:.0f}"
+            title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: \${op['profit']:.2f} ({int(roi)}\%) | Hedge: \${op['hedge']:.0f}"
             
             with st.expander(title):
                 c1, c2, c3 = st.columns(3)
