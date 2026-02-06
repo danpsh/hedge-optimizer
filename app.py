@@ -33,6 +33,20 @@ st.markdown("""
 if 'select_all' not in st.session_state:
     st.session_state.select_all = False
 
+# --- SIDEBAR DEBUG TOOL ---
+st.sidebar.header("API Tools")
+if st.sidebar.button("Check Active Sport Keys"):
+    api_key = st.secrets.get("ODDS_API_KEY", "")
+    if api_key:
+        active_res = requests.get(f"https://api.the-odds-api.com/v4/sports/?apiKey={api_key}")
+        if active_res.status_code == 200:
+            st.sidebar.write("### Active Keys")
+            for s in active_res.json():
+                if "olympic" in s['key'] or "icehockey" in s['key']:
+                    st.sidebar.code(s['key'])
+        else:
+            st.sidebar.error("Could not fetch keys.")
+
 # --- HEADER AREA ---
 st.title("Promo Converter")
 quota_placeholder = st.empty()
@@ -63,13 +77,14 @@ with st.container():
         st.divider()
         
         st.write("**Select Sports to Scan:**")
-        # --- UPDATED SPORTS MAP ---
+        # --- UPDATED SPORTS MAP FOR 2026 WINTER OLYMPICS ---
         sports_map = {
             "NBA": "basketball_nba", 
             "NCAAB": "basketball_ncaab", 
             "NHL": "icehockey_nhl", 
             "MMA": "mma_mixed_martial_arts",
-            "Oly Hockey": "icehockey_olympics_men",
+            "Oly Hockey (M)": "icehockey_olympics_men",
+            "Oly Hockey (W)": "icehockey_olympics_women",
             "Oly General": "olympics_winter"
         }
         sport_labels = list(sports_map.keys())
@@ -113,12 +128,19 @@ if run_scan:
         with st.spinner("Scanning markets..."):
             for sport in selected_sports:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
+                # Note: We use 'h2h' for games. If scanning 'olympics_winter', 
+                # some markets may require 'outrights' instead of 'h2h'.
                 params = {'apiKey': api_key, 'regions': 'us,us2', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
                 
                 res = requests.get(url, params=params)
                 if res.status_code == 200:
                     quota_placeholder.markdown(f"**Quota Remaining:** {res.headers.get('x-requests-remaining', 'N/A')}")
                     games = res.json()
+                    
+                    if not games:
+                        st.sidebar.info(f"No active H2H markets found for {sport}.")
+                        continue
+
                     for game in games:
                         commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                         if commence_time <= now_utc: continue 
@@ -160,9 +182,8 @@ if run_scan:
                                 profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
                                 rating = (profit / max_wager) * 100
 
-                            if profit > -5.0:
-                                # Standardizing display name for Olympics
-                                if "olympics" in sport:
+                            if profit > -10.0:
+                                if "olympic" in sport:
                                     s_display = "OLY"
                                 else:
                                     s_display = "MMA" if "mma" in sport else sport.split('_')[-1].upper()
@@ -175,37 +196,35 @@ if run_scan:
                                     "s_team": s['team'], "s_book": s['book_name'], "s_price": s['price'],
                                     "h_team": best_h['team'], "h_book": best_h['book_name'], "h_price": best_h['price']
                                 })
+                else:
+                    st.error(f"Error fetching {sport}: {res.status_code}")
 
-        st.write("### Top 6 Opportunities")
-        # 1. Primary Sort by Profit
-        top_6 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:6]
+        if not all_opps:
+            st.warning("No qualifying opportunities found. Try selecting more sports or different books.")
+        else:
+            st.write("### Top 6 Opportunities")
+            top_6 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:6]
 
-        # 2. Determine thresholds for 3 Green / 3 Red split
-        if len(top_6) >= 1:
+            # Determine thresholds for 3 Green / 3 Red split
             all_hedge_vals = sorted([op['hedge'] for op in top_6])
-            # The 3rd lowest value determines the green cutoff
-            green_cutoff = all_hedge_vals[min(2, len(all_hedge_vals)-1)]
+            green_cutoff = all_hedge_vals[min(2, len(all_hedge_vals)-1)] if all_hedge_vals else 0
 
-        for i, op in enumerate(top_6):
-            # 3. Assign Dot (3 Lowest Hedge = Green, rest = Red)
-            dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
-
-            roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-            
-            # 4. Escaped Title to prevent grey shading
-            title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: \${op['profit']:.2f} ({int(roi)}\%) | Hedge: \${op['hedge']:.0f}"
-            
-            with st.expander(title):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.caption(f"SOURCE: {op['s_book'].upper()}")
-                    st.info(f"Bet ${max_wager:.0f} on {op['s_team']} @ {op['s_price']:+}")
-                with c2:
-                    st.caption(f"HEDGE: {op['h_book'].upper()}")
-                    st.success(f"Bet ${op['hedge']:.0f} on {op['h_team']} @ {op['h_price']:+}")
-                with c3:
-                    st.metric("Net Profit", f"${op['profit']:.2f}")
-                    st.write(f"**{op['game']}**")
+            for i, op in enumerate(top_6):
+                dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
+                roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
+                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: \${op['profit']:.2f} ({int(roi)}\%) | Hedge: \${op['hedge']:.0f}"
+                
+                with st.expander(title):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        st.caption(f"SOURCE: {op['s_book'].upper()}")
+                        st.info(f"Bet ${max_wager:.0f} on {op['s_team']} @ {op['s_price']:+}")
+                    with c2:
+                        st.caption(f"HEDGE: {op['h_book'].upper()}")
+                        st.success(f"Bet ${op['hedge']:.0f} on {op['h_team']} @ {op['h_price']:+}")
+                    with c3:
+                        st.metric("Net Profit", f"${op['profit']:.2f}")
+                        st.write(f"**{op['game']}**")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
