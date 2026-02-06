@@ -63,7 +63,15 @@ with st.container():
         st.divider()
         
         st.write("**Select Sports to Scan:**")
-        sports_map = {"NBA": "basketball_nba", "NCAAB": "basketball_ncaab", "NHL": "icehockey_nhl", "MMA": "mma_mixed_martial_arts"}
+        # --- UPDATED SPORTS MAP ---
+        sports_map = {
+            "NBA": "basketball_nba", 
+            "NCAAB": "basketball_ncaab", 
+            "NHL": "icehockey_nhl", 
+            "MMA": "mma_mixed_martial_arts",
+            "Oly Hockey": "icehockey_olympics_men",
+            "Oly General": "olympics_winter"
+        }
         sport_labels = list(sports_map.keys())
         selected_sports = []
 
@@ -153,7 +161,12 @@ if run_scan:
                                 rating = (profit / max_wager) * 100
 
                             if profit > -5.0:
-                                s_display = "MMA" if "mma" in sport else sport.split('_')[-1].upper()
+                                # Standardizing display name for Olympics
+                                if "olympics" in sport:
+                                    s_display = "OLY"
+                                else:
+                                    s_display = "MMA" if "mma" in sport else sport.split('_')[-1].upper()
+                                    
                                 all_opps.append({
                                     "game": f"{game['away_team']} vs {game['home_team']}",
                                     "sport": s_display,
@@ -233,4 +246,3 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
-
