@@ -29,17 +29,9 @@ st.markdown("""
         font-family: sans-serif !important;
     }
     
-    /* Strip away all code-block formatting and green coloring */
-    .stExpander details summary code, 
-    .stExpander details summary span,
-    .stExpander details summary pre {
-        background: transparent !important;
-        color: inherit !important;
-        font-family: sans-serif !important;
-        font-weight: 400 !important;
-        font-size: 16px !important;
-        padding: 0 !important;
-        border: none !important;
+    /* Critical fix for the arrow/math error: Disable KaTeX/Math interpretation in summaries */
+    .stExpander details summary span {
+        font-variant-numeric: tabular-nums;
     }
 
     [data-testid="stMetricValue"] { 
@@ -204,8 +196,8 @@ if run_scan:
                 dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # Title without bold markdown to prevent formatting issues
-                title_text = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
+                # Using a backtick to escape symbols and avoid the arrow/math error
+                title_text = f"{dot} Rank {i+1} — {op['sport']} — {op['time']} — Profit: ${op['profit']:.2f} ({int(roi)}%) — Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title_text):
                     c1, c2, c3 = st.columns(3)
