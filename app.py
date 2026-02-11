@@ -16,25 +16,30 @@ st.markdown("""
         border-radius: 12px; margin-bottom: 12px;
     }
 
-    /* Force Expanders to lose the gray background and code-style text */
+    /* Force Expanders to have a clean, uniform title style */
     .stExpander details summary {
         background-color: transparent !important;
     }
     
-    /* Target the text inside the expander header specifically */
+    /* Ensure one size, no bold, and standard font family */
     .stExpander details summary p {
-        font-weight: 800 !important;
+        font-weight: 400 !important;
+        font-size: 16px !important;
         color: #1e1e1e !important;
-        font-family: inherit !important;
+        font-family: sans-serif !important;
     }
     
-    /* Prevent "code" styling from appearing inside summary tags */
-    .stExpander details summary code {
+    /* Strip away all code-block formatting and green coloring */
+    .stExpander details summary code, 
+    .stExpander details summary span,
+    .stExpander details summary pre {
         background: transparent !important;
         color: inherit !important;
-        font-family: inherit !important;
-        font-weight: inherit !important;
+        font-family: sans-serif !important;
+        font-weight: 400 !important;
+        font-size: 16px !important;
         padding: 0 !important;
+        border: none !important;
     }
 
     [data-testid="stMetricValue"] { 
@@ -57,7 +62,7 @@ if 'select_all' not in st.session_state:
 # --- HEADER AREA ---
 st.title("Promo Converter")
 quota_placeholder = st.empty()
-quota_placeholder.markdown("**Quota:** Not scanned yet")
+quota_placeholder.markdown("Quota: Not scanned yet")
 
 # --- INPUT AREA ---
 with st.container():
@@ -83,7 +88,7 @@ with st.container():
 
         st.divider()
         
-        st.write("**Select Sports to Scan:**")
+        st.write("Select Sports to Scan:")
         sports_map = {
             "NBA": "basketball_nba", 
             "NCAAB": "basketball_ncaab", 
@@ -134,7 +139,7 @@ if run_scan:
                 
                 res = requests.get(url, params=params)
                 if res.status_code == 200:
-                    quota_placeholder.markdown(f"**Quota Remaining:** {res.headers.get('x-requests-remaining', 'N/A')}")
+                    quota_placeholder.markdown(f"Quota Remaining: {res.headers.get('x-requests-remaining', 'N/A')}")
                     games = res.json()
                     for game in games:
                         commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
@@ -199,7 +204,7 @@ if run_scan:
                 dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # Modified title string to avoid Markdown code-block detection
+                # Title without bold markdown to prevent formatting issues
                 title_text = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title_text):
@@ -212,7 +217,7 @@ if run_scan:
                         st.success(f"Bet ${op['hedge']:.0f} on {op['h_team']} @ {op['h_price']:+}")
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
-                        st.write(f"**{op['game']}**")
+                        st.write(f"{op['game']}")
         else:
             st.info("No viable opportunities found.")
 
