@@ -5,28 +5,29 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arb Terminal", layout="wide")
 
-# --- LIGHT TECH THEME ---
+# --- LIGHT TECH THEME (Minimal CSS) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
+    
+    /* Main Expander Container */
     div[data-testid="stExpander"] {
         background-color: #ffffff; border: 1px solid #d1d5db;
         border-radius: 12px; margin-bottom: 12px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
+
     [data-testid="stMetricValue"] { 
         color: #008f51 !important; font-family: 'Courier New', monospace; font-weight: 800;
     }
+    
     .stButton>button {
         background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
-    .stCheckbox { margin-bottom: -10px; }
+    
+    .stCheckbox { margin-bottom: -10px; white-space: nowrap; }
+    div[data-testid="column"] { width: min-content !important; min-width: 85px !important; }
     </style>
     """, unsafe_allow_html=True)
-
-# Initialize Session State for the "Select All" toggle if it doesn't exist
-if 'select_all' not in st.session_state:
-    st.session_state.select_all = False
 
 # --- HEADER AREA ---
 st.title("Promo Converter")
@@ -37,37 +38,40 @@ quota_placeholder.markdown("**Quota:** Not scanned yet")
 with st.container():
     with st.form("input_panel"):
         col1, col2, col_hedge = st.columns(3)
+        
+        book_map = {
+            "DraftKings": "draftkings",
+            "FanDuel": "fanduel",
+            "BetMGM": "betmgm",
+            "theScore / ESPN": "espnbet",
+            "All Books": "allbooks"
+        }
+
         with col1:
             promo_type = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
         with col2:
-            source_book_display = st.radio("Source Book (Promo)", ["DraftKings", "FanDuel", "BetMGM"], horizontal=True)
-            source_book = source_book_display.lower().replace(" ", "") 
+            source_book_display = st.radio("Source Book (Promo)", ["DraftKings", "FanDuel", "BetMGM", "theScore / ESPN"], horizontal=True)
+            source_book = book_map[source_book_display]
         with col_hedge:
-            hedge_book_display = st.radio("Hedge Book (Filter)", ["All Books", "DraftKings", "FanDuel", "BetMGM"], horizontal=True)
-            hedge_filter = hedge_book_display.lower().replace(" ", "")
+            hedge_book_display = st.radio("Hedge Book (Filter)", ["All Books", "DraftKings", "FanDuel", "BetMGM", "theScore / ESPN"], horizontal=True)
+            hedge_filter = book_map[hedge_book_display]
 
         st.divider()
         
-        # --- HORIZONTAL SPORT CHECKBOXES WITH SELECT ALL ---
         st.write("**Select Sports to Scan:**")
-        sport_labels = ["NBA", "NHL", "NFL", "MLB", "NCAAB", "NCAAF"]
-        sport_keys = ["basketball_nba", "icehockey_nhl", "americanfootball_nfl", "baseball_mlb", "basketball_ncaab", "americanfootball_ncaaf"]
-        
-        # Create 7 columns (6 for sports, 1 for Select All)
-        sport_cols = st.columns(7)
+        sports_map = {
+            "NBA": "basketball_nba", 
+            "NCAAB": "basketball_ncaab", 
+            "NHL": "icehockey_nhl"
+        }
+        sport_labels = list(sports_map.keys())
         selected_sports = []
-        
-        # 1. The Select All Toggle
-        with sport_cols[0]:
-            all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
 
-        # 2. Individual Sports
-        for i in range(len(sport_labels)):
-            with sport_cols[i+1]:
-                # If "Select All" is checked, individual boxes default to True
-                is_checked = st.checkbox(sport_labels[i], value=all_clicked)
-                if is_checked:
-                    selected_sports.append(sport_keys[i])
+        sport_cols = st.columns(len(sport_labels))
+        for i, label in enumerate(sport_labels):
+            with sport_cols[i]:
+                if st.checkbox(label, key=f"cb_{label}"):
+                    selected_sports.append(sports_map[label])
 
         st.divider()
         col_w, col_b = st.columns([1, 1])
@@ -82,9 +86,9 @@ with st.container():
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
-        st.error("Missing API Key! Set ODDS_API_KEY in Streamlit Secrets.")
+        st.error("Missing API Key! Please add ODDS_API_KEY to your Streamlit secrets.")
     elif not selected_sports:
-        st.warning("Please select at least one sport above.")
+        st.warning("Please select at least one sport.")
     else:
         try:
             max_wager = float(max_wager_raw)
@@ -96,126 +100,126 @@ if run_scan:
         all_opps = []
         now_utc = datetime.now(timezone.utc)
 
-        with st.spinner(f"Scanning {len(selected_sports)} markets..."):
+        with st.spinner("Scanning markets..."):
             for sport in selected_sports:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
-                params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
+                params = {'apiKey': api_key, 'regions': 'us,us2', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
                 
-                try:
-                    res = requests.get(url, params=params)
-                    quota_rem = res.headers.get('x-requests-remaining', 'N/A')
-                    quota_placeholder.markdown(f"**Quota Remaining:** {quota_rem}")
+                res = requests.get(url, params=params)
+                if res.status_code == 200:
+                    quota_placeholder.markdown(f"**Quota Remaining:** {res.headers.get('x-requests-remaining', 'N/A')}")
+                    games = res.json()
+                    for game in games:
+                        commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                        if commence_time <= now_utc: continue 
+                        
+                        source_odds = []
+                        hedge_odds = []
 
-                    if res.status_code == 200:
-                        games = res.json()
-                        for game in games:
-                            commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                            if commence_time <= now_utc: continue 
+                        for book in game['bookmakers']:
+                            for market in book['markets']:
+                                for o in market['outcomes']:
+                                    entry = {'book_name': book['title'], 'team': o['name'], 'price': o['price']}
+                                    if book['key'] == source_book:
+                                        source_odds.append(entry)
+                                    if hedge_filter == "allbooks" or book['key'] == hedge_filter:
+                                        hedge_odds.append(entry)
+
+                        for s in source_odds:
+                            opp_team = next((t for t in [game['home_team'], game['away_team']] if t != s['team']), None)
+                            eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
+                            if not eligible_hedges: continue
                             
-                            source_odds = []
-                            hedge_odds = []
+                            best_h = max(eligible_hedges, key=lambda x: x['price'])
                             
-                            for book in game['bookmakers']:
-                                for market in book['markets']:
-                                    for o in market['outcomes']:
-                                        entry = {'book': book['title'], 'key': book['key'], 'team': o['name'], 'price': o['price']}
-                                        if book['key'] == source_book:
-                                            source_odds.append(entry)
-                                        else:
-                                            if hedge_filter == "allbooks" or book['key'] == hedge_filter:
-                                                hedge_odds.append(entry)
+                            s_m = (s['price'] / 100) if s['price'] > 0 else (100 / abs(s['price']))
+                            h_m = (best_h['price'] / 100) if best_h['price'] > 0 else (100 / abs(best_h['price']))
 
-                            for s in source_odds:
-                                opp_team = [t for t in [game['home_team'], game['away_team']] if t != s['team']][0]
-                                eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
-                                if not eligible_hedges: continue
-                                
-                                best_h = max(eligible_hedges, key=lambda x: x['price'])
-                                s_m = (s['price'] / 100) if s['price'] > 0 else (100 / abs(s['price']))
-                                h_m = (best_h['price'] / 100) if best_h['price'] > 0 else (100 / abs(best_h['price']))
+                            if promo_type == "Profit Boost (%)":
+                                b_s_m = s_m * (1 + (boost_val / 100))
+                                h_needed = round((max_wager * (1 + b_s_m)) / (1 + h_m))
+                                profit = min(((max_wager * b_s_m) - h_needed), ((h_needed * h_m) - max_wager))
+                                rating = profit
+                            elif promo_type == "Bonus Bet":
+                                h_needed = round((max_wager * s_m) / (1 + h_m))
+                                profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
+                                rating = (profit / max_wager) * 100
+                            else: 
+                                mc = 0.65 
+                                h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
+                                profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
+                                rating = (profit / max_wager) * 100
 
-                                if promo_type == "Profit Boost (%)":
-                                    boosted_s_m = s_m * (1 + (boost_val / 100))
-                                    h_needed = round((max_wager * (1 + boosted_s_m)) / (1 + h_m))
-                                    profit = min(((max_wager * boosted_s_m) - h_needed), ((h_needed * h_m) - max_wager))
-                                    rating = profit
-                                elif promo_type == "Bonus Bet":
-                                    h_needed = round((max_wager * s_m) / (1 + h_m))
-                                    profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
-                                    rating = (profit / max_wager) * 100
-                                else: # No-Sweat
-                                    mc = 0.70
-                                    h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
-                                    profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
-                                    rating = (profit / max_wager) * 100
+                            if profit > -5.0:
+                                s_display = sport.split('_')[-1].upper()
+                                all_opps.append({
+                                    "game": f"{game['away_team']} vs {game['home_team']}",
+                                    "sport": s_display,
+                                    "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M%p"),
+                                    "profit": profit, "hedge": h_needed, "rating": rating,
+                                    "s_team": s['team'], "s_book": s['book_name'], "s_price": s['price'],
+                                    "h_team": best_h['team'], "h_book": best_h['book_name'], "h_price": best_h['price']
+                                })
 
-                                if profit > -5.0:
-                                    all_opps.append({
-                                        "game": f"{game['away_team']} vs {game['home_team']}",
-                                        "sport": sport.split('_')[-1].upper(),
-                                        "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
-                                        "profit": profit, "hedge": h_needed, "rating": rating,
-                                        "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
-                                        "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price']
-                                    })
-                except Exception as e:
-                    st.error(f"Error on {sport}: {e}")
+        st.write("### Top 6 Opportunities")
+        top_6 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:6]
 
-        st.write("### Top Scanned Opportunities")
-        sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
-        if not sorted_opps:
-            st.warning(f"No high-value matches found.")
-        else:
-            for i, op in enumerate(sorted_opps[:10]):
+        if len(top_6) >= 1:
+            all_hedge_vals = sorted([op['hedge'] for op in top_6])
+            green_cutoff = all_hedge_vals[min(2, len(all_hedge_vals)-1)]
+
+            for i, op in enumerate(top_6):
+                dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-                title = f"RANK {i+1} | {op['sport']} | {op['time']} | +${op['profit']:.2f} ({roi:.1f}%)"
+                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
+                
                 with st.expander(title):
-                    st.write(f"**{op['game']}**")
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.caption(f"SOURCE: {op['s_book'].upper()}")
-                        st.info(f"Bet **${max_wager:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
+                        st.info(f"Bet ${max_wager:.0f} on {op['s_team']} @ {op['s_price']:+}")
                     with c2:
                         st.caption(f"HEDGE: {op['h_book'].upper()}")
-                        st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
+                        st.success(f"Bet ${op['hedge']:.0f} on {op['h_team']} @ {op['h_price']:+}")
                     with c3:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
-                        st.caption(f"Strategy: {promo_type}")
+                        st.write(f"**{op['game']}**")
+        else:
+            st.info("No viable opportunities found. Try expanding your sport selection or hedge filters.")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
 st.subheader("Manual Calculator")
-with st.expander("Open Manual Calculator", expanded=True):
+with st.expander("Open Manual Calculator", expanded=False):
     with st.form("manual_calc_form"):
         m_promo = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True, key="m_strat")
         m_col1, m_col2 = st.columns(2)
         with m_col1:
-            m_s_price = st.text_input("Source Odds", value="250")
-            m_wager = st.text_input("Wager ($)", value="50.0")
-            m_boost = st.text_input("Boost %", value="50") if m_promo == "Profit Boost (%)" else "0"
+            m_s_p = st.text_input("Source Odds", value="250")
+            m_w = st.text_input("Wager ($)", value="50.0")
+            m_b = st.text_input("Boost %", value="50") if m_promo == "Profit Boost (%)" else "0"
         with m_col2:
-            m_h_price = st.text_input("Hedge Odds", value="-280")
-            m_conv = st.text_input("Refund %", value="65") if m_promo == "No-Sweat Bet" else "0"
+            m_h_p = st.text_input("Hedge Odds", value="-280")
+            m_c = st.text_input("Refund %", value="65") if m_promo == "No-Sweat Bet" else "0"
         
         if st.form_submit_button("Calculate Hedge", use_container_width=True):
             try:
-                ms_p, mw, mh_p = float(m_s_price), float(m_wager), float(m_h_price)
+                ms_p, mw, mh_p = float(m_s_p), float(m_w), float(m_h_p)
                 ms_m = (ms_p / 100) if ms_p > 0 else (100 / abs(ms_p))
                 mh_m = (mh_p / 100) if mh_p > 0 else (100 / abs(mh_p))
                 
                 if m_promo == "Profit Boost (%)":
-                    boosted_m = ms_m * (1 + float(m_boost)/100)
+                    boosted_m = ms_m * (1 + float(m_b)/100)
                     m_h = round((mw * (1 + boosted_m)) / (1 + mh_m))
                     m_p = min(((mw * boosted_m) - m_h), ((m_h * mh_m) - mw))
                 elif m_promo == "Bonus Bet":
                     m_h = round((mw * ms_m) / (1 + mh_m))
                     m_p = min(((mw * ms_m) - m_h), (m_h * mh_m))
                 else: 
-                    mc = float(m_conv)/100 
+                    mc = float(m_c)/100 
                     m_h = round((mw * (ms_m + (1 - mc))) / (mh_m + 1))
                     m_p = min(((mw * ms_m) - m_h), ((m_h * mh_m) + (mw * mc) - mw))
                 
-                st.divider()
                 rc1, rc2, rc3 = st.columns(3)
                 rc1.metric("Hedge Amount", f"${m_h:.0f}")
                 rc2.metric("Net Profit", f"${m_p:.2f}")
