@@ -16,14 +16,25 @@ st.markdown("""
         border-radius: 12px; margin-bottom: 12px;
     }
 
-    /* Remove gray background and style the title */
+    /* Force Expanders to lose the gray background and code-style text */
     .stExpander details summary {
         background-color: transparent !important;
     }
     
+    /* Target the text inside the expander header specifically */
     .stExpander details summary p {
-        font-weight: 600;
-        color: #1e1e1e;
+        font-weight: 800 !important;
+        color: #1e1e1e !important;
+        font-family: inherit !important;
+    }
+    
+    /* Prevent "code" styling from appearing inside summary tags */
+    .stExpander details summary code {
+        background: transparent !important;
+        color: inherit !important;
+        font-family: inherit !important;
+        font-weight: inherit !important;
+        padding: 0 !important;
     }
 
     [data-testid="stMetricValue"] { 
@@ -73,7 +84,6 @@ with st.container():
         st.divider()
         
         st.write("**Select Sports to Scan:**")
-        # Updated sports_map: MMA and Olympics removed
         sports_map = {
             "NBA": "basketball_nba", 
             "NCAAB": "basketball_ncaab", 
@@ -149,7 +159,6 @@ if run_scan:
                             
                             best_h = max(eligible_hedges, key=lambda x: x['price'])
                             
-                            # Decimal conversion for math
                             s_m = (s['price'] / 100) if s['price'] > 0 else (100 / abs(s['price']))
                             h_m = (best_h['price'] / 100) if best_h['price'] > 0 else (100 / abs(best_h['price']))
 
@@ -163,7 +172,7 @@ if run_scan:
                                 profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                 rating = (profit / max_wager) * 100
                             else: # No-Sweat Math
-                                mc = 0.675 # Assumes 67.5% conversion of the refund
+                                mc = 0.675 
                                 h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                 profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
                                 rating = (profit / max_wager) * 100
@@ -189,9 +198,11 @@ if run_scan:
             for i, op in enumerate(top_6):
                 dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
                 
-                with st.expander(title):
+                # Modified title string to avoid Markdown code-block detection
+                title_text = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
+                
+                with st.expander(title_text):
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.caption(f"SOURCE: {op['s_book'].upper()}")
@@ -203,7 +214,7 @@ if run_scan:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.write(f"**{op['game']}**")
         else:
-            st.info("No viable opportunities found. Try expanding your sport selection or hedge filters.")
+            st.info("No viable opportunities found.")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
