@@ -29,9 +29,19 @@ st.markdown("""
         font-family: sans-serif !important;
     }
     
-    /* Critical fix for the arrow/math error: Disable KaTeX/Math interpretation in summaries */
-    .stExpander details summary span {
-        font-variant-numeric: tabular-nums;
+    /* STOPS THE GREEN TEXT: Hard reset on any 'code' or 'span' elements inside the title */
+    .stExpander details summary code, 
+    .stExpander details summary span,
+    .stExpander details summary pre {
+        background-color: transparent !important;
+        background: none !important;
+        color: #1e1e1e !important;
+        font-family: sans-serif !important;
+        font-weight: 400 !important;
+        font-size: 16px !important;
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
     }
 
     [data-testid="stMetricValue"] { 
@@ -196,7 +206,7 @@ if run_scan:
                 dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # Using a backtick to escape symbols and avoid the arrow/math error
+                # Simplified Title to prevent automated code formatting
                 title_text = f"{dot} Rank {i+1} — {op['sport']} — {op['time']} — Profit: ${op['profit']:.2f} ({int(roi)}%) — Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title_text):
