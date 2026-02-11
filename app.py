@@ -63,14 +63,11 @@ with st.container():
         st.divider()
         
         st.write("**Select Sports to Scan:**")
-        # --- ADDED OLYMPIC KEYS FOR 2026 ---
+        # Updated sports_map: MMA and Olympics removed
         sports_map = {
             "NBA": "basketball_nba", 
             "NCAAB": "basketball_ncaab", 
-            "NHL": "icehockey_nhl", 
-            "MMA": "mma_mixed_martial_arts",
-            "Oly Hockey": "icehockey_olympics_men",
-            "Oly General": "olympics_winter"
+            "NHL": "icehockey_nhl"
         }
         sport_labels = list(sports_map.keys())
         selected_sports = []
@@ -96,7 +93,7 @@ with st.container():
 if run_scan:
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
-        st.error("Missing API Key!")
+        st.error("Missing API Key! Please add ODDS_API_KEY to your Streamlit secrets.")
     elif not selected_sports:
         st.warning("Please select at least one sport.")
     else:
@@ -142,6 +139,7 @@ if run_scan:
                             
                             best_h = max(eligible_hedges, key=lambda x: x['price'])
                             
+                            # Decimal conversion for math
                             s_m = (s['price'] / 100) if s['price'] > 0 else (100 / abs(s['price']))
                             h_m = (best_h['price'] / 100) if best_h['price'] > 0 else (100 / abs(best_h['price']))
 
@@ -155,13 +153,13 @@ if run_scan:
                                 profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                 rating = (profit / max_wager) * 100
                             else: # No-Sweat Math
-                                mc = 0.70
+                                mc = 0.70 # Assumes 70% conversion of the refund
                                 h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                 profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
                                 rating = (profit / max_wager) * 100
 
                             if profit > -5.0:
-                                s_display = "MMA" if "mma" in sport else sport.split('_')[-1].upper()
+                                s_display = sport.split('_')[-1].upper()
                                 all_opps.append({
                                     "game": f"{game['away_team']} vs {game['home_team']}",
                                     "sport": s_display,
@@ -178,22 +176,24 @@ if run_scan:
             all_hedge_vals = sorted([op['hedge'] for op in top_6])
             green_cutoff = all_hedge_vals[min(2, len(all_hedge_vals)-1)]
 
-        for i, op in enumerate(top_6):
-            dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
-            roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-            title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: \${op['profit']:.2f} ({int(roi)}\%) | Hedge: \${op['hedge']:.0f}"
-            
-            with st.expander(title):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.caption(f"SOURCE: {op['s_book'].upper()}")
-                    st.info(f"Bet ${max_wager:.0f} on {op['s_team']} @ {op['s_price']:+}")
-                with c2:
-                    st.caption(f"HEDGE: {op['h_book'].upper()}")
-                    st.success(f"Bet ${op['hedge']:.0f} on {op['h_team']} @ {op['h_price']:+}")
-                with c3:
-                    st.metric("Net Profit", f"${op['profit']:.2f}")
-                    st.write(f"**{op['game']}**")
+            for i, op in enumerate(top_6):
+                dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
+                roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
+                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
+                
+                with st.expander(title):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        st.caption(f"SOURCE: {op['s_book'].upper()}")
+                        st.info(f"Bet ${max_wager:.0f} on {op['s_team']} @ {op['s_price']:+}")
+                    with c2:
+                        st.caption(f"HEDGE: {op['h_book'].upper()}")
+                        st.success(f"Bet ${op['hedge']:.0f} on {op['h_team']} @ {op['h_price']:+}")
+                    with c3:
+                        st.metric("Net Profit", f"${op['profit']:.2f}")
+                        st.write(f"**{op['game']}**")
+        else:
+            st.info("No viable opportunities found. Try expanding your sport selection or hedge filters.")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
