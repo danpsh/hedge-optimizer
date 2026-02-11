@@ -16,6 +16,16 @@ st.markdown("""
         border-radius: 12px; margin-bottom: 12px;
     }
 
+    /* Remove gray background and style the title */
+    .stExpander details summary {
+        background-color: transparent !important;
+    }
+    
+    .stExpander details summary p {
+        font-weight: 600;
+        color: #1e1e1e;
+    }
+
     [data-testid="stMetricValue"] { 
         color: #008f51 !important; font-family: 'Courier New', monospace; font-weight: 800;
     }
