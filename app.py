@@ -5,42 +5,33 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arb Terminal", layout="wide")
 
-# --- LIGHT TECH THEME ---
+# --- LIGHT TECH THEME (Minimal CSS) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
+    
+    /* Main Expander Container */
     div[data-testid="stExpander"] {
         background-color: #ffffff; border: 1px solid #d1d5db;
         border-radius: 12px; margin-bottom: 12px;
     }
+
     [data-testid="stMetricValue"] { 
         color: #008f51 !important; font-family: 'Courier New', monospace; font-weight: 800;
     }
+    
     .stButton>button {
         background-color: #1e1e1e; color: #00ff88; border: none; border-radius: 8px; font-weight: bold;
     }
+    
     .stCheckbox { margin-bottom: -10px; white-space: nowrap; }
     div[data-testid="column"] { width: min-content !important; min-width: 85px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SPORTS CONFIG & SESSION STATE ---
-sports_map = {
-    "NBA": "basketball_nba", 
-    "NCAAB": "basketball_ncaab", 
-    "NHL": "icehockey_nhl"
-}
-sport_labels = list(sports_map.keys())
-
-# Initialize individual checkbox states if not present
-for label in sport_labels:
-    if f"cb_{label}" not in st.session_state:
-        st.session_state[f"cb_{label}"] = False
-
-# Callback to sync "Select All" with individual checkboxes
-def toggle_all():
-    for label in sport_labels:
-        st.session_state[f"cb_{label}"] = st.session_state.all_sel
+# Initialize Session State
+if 'select_all' not in st.session_state:
+    st.session_state.select_all = False
 
 # --- HEADER AREA ---
 st.title("Promo Converter")
@@ -72,17 +63,21 @@ with st.container():
         st.divider()
         
         st.write("**Select Sports to Scan:**")
-        
-        # Master Checkbox (Select All) - Placed outside form is usually better, 
-        # but to keep your layout, we use the session state keys.
-        st.checkbox("Select All", key="all_sel", on_change=toggle_all)
-
+        # Updated sports_map: MMA and Olympics removed
+        sports_map = {
+            "NBA": "basketball_nba", 
+            "NCAAB": "basketball_ncaab", 
+            "NHL": "icehockey_nhl"
+        }
+        sport_labels = list(sports_map.keys())
         selected_sports = []
+
+        all_clicked = st.checkbox("Select All", value=st.session_state.select_all)
+
         sport_cols = st.columns(len(sport_labels))
         for i, label in enumerate(sport_labels):
             with sport_cols[i]:
-                # Individual checkboxes linked to keys
-                if st.checkbox(label, key=f"cb_{label}"):
+                if st.checkbox(label, value=all_clicked, key=f"cb_{label}"):
                     selected_sports.append(sports_map[label])
 
         st.divider()
@@ -117,69 +112,67 @@ if run_scan:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
                 params = {'apiKey': api_key, 'regions': 'us,us2', 'markets': 'h2h', 'bookmakers': BOOK_LIST, 'oddsFormat': 'american'}
                 
-                try:
-                    res = requests.get(url, params=params)
-                    if res.status_code == 200:
-                        quota_placeholder.markdown(f"**Quota Remaining:** {res.headers.get('x-requests-remaining', 'N/A')}")
-                        games = res.json()
-                        for game in games:
-                            commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                            if commence_time <= now_utc: continue 
+                res = requests.get(url, params=params)
+                if res.status_code == 200:
+                    quota_placeholder.markdown(f"**Quota Remaining:** {res.headers.get('x-requests-remaining', 'N/A')}")
+                    games = res.json()
+                    for game in games:
+                        commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                        if commence_time <= now_utc: continue 
+                        
+                        source_odds = []
+                        hedge_odds = []
+
+                        for book in game['bookmakers']:
+                            for market in book['markets']:
+                                for o in market['outcomes']:
+                                    entry = {'book_name': book['title'], 'team': o['name'], 'price': o['price']}
+                                    if book['key'] == source_book:
+                                        source_odds.append(entry)
+                                    if hedge_filter == "allbooks" or book['key'] == hedge_filter:
+                                        hedge_odds.append(entry)
+
+                        for s in source_odds:
+                            opp_team = next((t for t in [game['home_team'], game['away_team']] if t != s['team']), None)
+                            eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
+                            if not eligible_hedges: continue
                             
-                            source_odds = []
-                            hedge_odds = []
+                            best_h = max(eligible_hedges, key=lambda x: x['price'])
+                            
+                            # Decimal conversion for math
+                            s_m = (s['price'] / 100) if s['price'] > 0 else (100 / abs(s['price']))
+                            h_m = (best_h['price'] / 100) if best_h['price'] > 0 else (100 / abs(best_h['price']))
 
-                            for book in game['bookmakers']:
-                                for market in book['markets']:
-                                    for o in market['outcomes']:
-                                        entry = {'book_name': book['title'], 'team': o['name'], 'price': o['price']}
-                                        if book['key'] == source_book:
-                                            source_odds.append(entry)
-                                        if hedge_filter == "allbooks" or book['key'] == hedge_filter:
-                                            hedge_odds.append(entry)
+                            if promo_type == "Profit Boost (%)":
+                                b_s_m = s_m * (1 + (boost_val / 100))
+                                h_needed = round((max_wager * (1 + b_s_m)) / (1 + h_m))
+                                profit = min(((max_wager * b_s_m) - h_needed), ((h_needed * h_m) - max_wager))
+                                rating = profit
+                            elif promo_type == "Bonus Bet":
+                                h_needed = round((max_wager * s_m) / (1 + h_m))
+                                profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
+                                rating = (profit / max_wager) * 100
+                            else: # No-Sweat Math
+                                mc = 0.70 # Assumes 70% conversion of the refund
+                                h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
+                                profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
+                                rating = (profit / max_wager) * 100
 
-                            for s in source_odds:
-                                opp_team = next((t for t in [game['home_team'], game['away_team']] if t != s['team']), None)
-                                eligible_hedges = [h for h in hedge_odds if h['team'] == opp_team]
-                                if not eligible_hedges: continue
-                                
-                                best_h = max(eligible_hedges, key=lambda x: x['price'])
-                                
-                                s_m = (s['price'] / 100) if s['price'] > 0 else (100 / abs(s['price']))
-                                h_m = (best_h['price'] / 100) if best_h['price'] > 0 else (100 / abs(best_h['price']))
-
-                                if promo_type == "Profit Boost (%)":
-                                    b_s_m = s_m * (1 + (boost_val / 100))
-                                    h_needed = round((max_wager * (1 + b_s_m)) / (1 + h_m))
-                                    profit = min(((max_wager * b_s_m) - h_needed), ((h_needed * h_m) - max_wager))
-                                    rating = profit
-                                elif promo_type == "Bonus Bet":
-                                    h_needed = round((max_wager * s_m) / (1 + h_m))
-                                    profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
-                                    rating = (profit / max_wager) * 100
-                                else: 
-                                    mc = 0.70 
-                                    h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
-                                    profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
-                                    rating = (profit / max_wager) * 100
-
-                                if profit > -5.0:
-                                    s_display = sport.split('_')[-1].upper()
-                                    all_opps.append({
-                                        "game": f"{game['away_team']} vs {game['home_team']}",
-                                        "sport": s_display,
-                                        "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M%p"),
-                                        "profit": profit, "hedge": h_needed, "rating": rating,
-                                        "s_team": s['team'], "s_book": s['book_name'], "s_price": s['price'],
-                                        "h_team": best_h['team'], "h_book": best_h['book_name'], "h_price": best_h['price']
-                                    })
-                except Exception as e:
-                    st.error(f"Error scanning {sport}: {e}")
+                            if profit > -5.0:
+                                s_display = sport.split('_')[-1].upper()
+                                all_opps.append({
+                                    "game": f"{game['away_team']} vs {game['home_team']}",
+                                    "sport": s_display,
+                                    "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M%p"),
+                                    "profit": profit, "hedge": h_needed, "rating": rating,
+                                    "s_team": s['team'], "s_book": s['book_name'], "s_price": s['price'],
+                                    "h_team": best_h['team'], "h_book": best_h['book_name'], "h_price": best_h['price']
+                                })
 
         st.write("### Top 6 Opportunities")
         top_6 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:6]
 
-        if top_6:
+        if len(top_6) >= 1:
             all_hedge_vals = sorted([op['hedge'] for op in top_6])
             green_cutoff = all_hedge_vals[min(2, len(all_hedge_vals)-1)]
 
@@ -200,12 +193,12 @@ if run_scan:
                         st.metric("Net Profit", f"${op['profit']:.2f}")
                         st.write(f"**{op['game']}**")
         else:
-            st.info("No viable opportunities found.")
+            st.info("No viable opportunities found. Try expanding your sport selection or hedge filters.")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
 st.subheader("Manual Calculator")
-with st.expander("Open Manual Calculator"):
+with st.expander("Open Manual Calculator", expanded=False):
     with st.form("manual_calc_form"):
         m_promo = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True, key="m_strat")
         m_col1, m_col2 = st.columns(2)
