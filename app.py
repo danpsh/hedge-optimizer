@@ -162,28 +162,31 @@ if run_scan:
                                 })
 
         st.write("### Top 6 Opportunities")
-        top_6 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:6]
+top_6 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:6]
 
-        if len(top_6) >= 1:
-            all_hedge_vals = sorted([op['hedge'] for op in top_6])
-            green_cutoff = all_hedge_vals[min(2, len(all_hedge_vals)-1)]
+if len(top_6) >= 1:
+    all_hedge_vals = sorted([op['hedge'] for op in top_6])
+    # Logic: Mark the 3 cheapest hedges as "Green"
+    green_cutoff = all_hedge_vals[min(2, len(all_hedge_vals)-1)]
 
-            for i, op in enumerate(top_6):
-                dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
-                roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
-                title = f"{dot} Rank {i+1} | {op['sport']} ({op['time']}) | Profit: ${op['profit']:.2f} ({int(roi)}%) | Hedge: ${op['hedge']:.0f}"
-                
-                with st.expander(title):
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        st.caption(f"SOURCE: {op['s_book'].upper()}")
-                        st.info(f"Bet ${max_wager:.0f} on {op['s_team']} @ {op['s_price']:+}")
-                    with c2:
-                        st.caption(f"HEDGE: {op['h_book'].upper()}")
-                        st.success(f"Bet ${op['hedge']:.0f} on {op['h_team']} @ {op['h_price']:+}")
-                    with c3:
-                        st.metric("Net Profit", f"${op['profit']:.2f}")
-                        st.write(f"**{op['game']}**")
+    for i, op in enumerate(top_6):
+        dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
+        roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
+        
+        # FIX: Using bolding and a different separator to stop color/formatting bleed
+        title = f"{dot} **Rank {i+1}** ｜ {op['sport']} ({op['time']}) ｜ Profit: ${op['profit']:.2f} ({int(roi)}%) ｜ Hedge: ${op['hedge']:.0f}"
+        
+        with st.expander(title):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.caption(f"SOURCE: {op['s_book'].upper()}")
+                st.info(f"Bet ${max_wager:.0f} on {op['s_team']} @ {op['s_price']:+}")
+            with c2:
+                st.caption(f"HEDGE: {op['h_book'].upper()}")
+                st.success(f"Bet ${op['hedge']:.0f} on {op['h_team']} @ {op['h_price']:+}")
+            with c3:
+                st.metric("Net Profit", f"${op['profit']:.2f}")
+                st.write(f"**{op['game']}**")
         else:
             st.info("No viable opportunities found. Try expanding your sport selection or hedge filters.")
 
@@ -226,3 +229,4 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
