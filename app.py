@@ -66,6 +66,8 @@ with st.container():
         sports_map = {
             "NBA": "basketball_nba", 
             "NCAAB": "basketball_ncaab", 
+            "WNBA": "basketball_wnba",
+            "NCAAW": "basketball_wncaab",
             "NHL": "icehockey_nhl"
         }
         sport_labels = list(sports_map.keys())
@@ -167,18 +169,17 @@ if run_scan:
                                     "h_team": best_h['team'], "h_book": best_h['book_name'], "h_price": best_h['price']
                                 })
 
-        st.write("### Top 6 Opportunities")
-        top_6 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:6]
+        st.write("### Top 10 Opportunities")
+        top_10 = sorted(all_opps, key=lambda x: x['rating'], reverse=True)[:10]
 
-        if len(top_6) >= 1:
-            all_hedge_vals = sorted([op['hedge'] for op in top_6])
+        if len(top_10) >= 1:
+            all_hedge_vals = sorted([op['hedge'] for op in top_10])
             green_cutoff = all_hedge_vals[min(2, len(all_hedge_vals)-1)]
 
-            for i, op in enumerate(top_6):
+            for i, op in enumerate(top_10):
                 dot = "🟢" if op['hedge'] <= green_cutoff else "🔴"
                 roi = op['rating'] if promo_type != "Profit Boost (%)" else (op['profit'] / max_wager) * 100
                 
-                # STABILITY FIX: Bold tags and Unicode dividers prevent color bleeding
                 title = f"{dot} **Rank {i+1}** ｜ {op['sport']} ({op['time']}) ｜ Profit: ${op['profit']:.2f} ({int(roi)}%) ｜ Hedge: ${op['hedge']:.0f}"
                 
                 with st.expander(title):
@@ -234,4 +235,3 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
-
