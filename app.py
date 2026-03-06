@@ -69,9 +69,8 @@ with st.container():
             "NCAAW": "basketball_wncaab",
             "NHL": "icehockey_nhl",
             "Boxing": "boxing_boxing",
-            "MMA": "mma_mixed_martial_arts 
+            "MMA": "mma_mixed_martial_arts" 
         }
-        
         sport_labels = list(sports_map.keys())
         selected_sports = []
 
@@ -237,6 +236,7 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
 
 
 
