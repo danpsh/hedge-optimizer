@@ -66,9 +66,10 @@ with st.container():
         sports_map = {
             "NBA": "basketball_nba", 
             "NCAAB": "basketball_ncaab", 
-            "WNBA": "basketball_wnba",
             "NCAAW": "basketball_wncaab",
-            "NHL": "icehockey_nhl"
+            "NHL": "icehockey_nhl",
+            "Boxing": "boxing_boxing",
+            "MMA": "mma_mixed_martial_arts  
         }
         sport_labels = list(sports_map.keys())
         selected_sports = []
@@ -153,7 +154,7 @@ if run_scan:
                                 profit = min(((max_wager * s_m) - h_needed), (h_needed * h_m))
                                 rating = (profit / max_wager) * 100
                             else: # No-Sweat Math
-                                mc = 0.675 
+                                mc = 0.70 
                                 h_needed = round((max_wager * (s_m + (1 - mc))) / (h_m + 1))
                                 profit = min(((max_wager * s_m) - h_needed), ((h_needed * h_m) + (max_wager * mc) - max_wager))
                                 rating = (profit / max_wager) * 100
@@ -209,7 +210,7 @@ with st.expander("Open Manual Calculator", expanded=False):
             m_b = st.text_input("Boost %", value="50") if m_promo == "Profit Boost (%)" else "0"
         with m_col2:
             m_h_p = st.text_input("Hedge Odds", value="-280")
-            m_c = st.text_input("Refund %", value="67.5") if m_promo == "No-Sweat Bet" else "0"
+            m_c = st.text_input("Refund %", value="70") if m_promo == "No-Sweat Bet" else "0"
         
         if st.form_submit_button("Calculate Hedge", use_container_width=True):
             try:
@@ -235,3 +236,4 @@ with st.expander("Open Manual Calculator", expanded=False):
                 rc3.metric("ROI", f"{((m_p/mw)*100):.1f}%")
             except: 
                 st.error("Please enter valid numbers.")
+
