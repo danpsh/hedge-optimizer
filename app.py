@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Promo Converter", layout="wide")
 
-# --- TECH LIGHT THEME ---
+# --- PROFESSIONAL THEME ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono&display=swap');
@@ -13,7 +13,7 @@ st.markdown("""
     .stApp { background-color: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; }
     h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; }
 
-    /* Expanders & Cards */
+    /* Cards & Expanders */
     div[data-testid="stExpander"] {
         background-color: #ffffff !important;
         border: 1px solid #e2e8f0 !important;
@@ -21,29 +21,38 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
 
-    /* Green Metrics */
-    [data-testid="stMetricValue"] {
-        color: #008f51 !important;
-        font-family: 'Roboto Mono', monospace;
-        font-weight: 800;
-        font-size: 1.6rem !important;
-    }
-    
-    /* Dark Buttons with Green Text */
+    /* NORMAL BUTTONS (Identify Opps / Clear All) */
     .stButton>button {
-        background-color: #1e1e1e;
-        color: #00ff88;
-        border: none;
-        border-radius: 8px;
-        font-weight: bold;
+        background-color: #1e293b !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        transition: background-color 0.2s;
     }
-    .stButton>button:hover { color: #00ff88; border: 1px solid #00ff88; }
+    .stButton>button:hover {
+        background-color: #334155 !important;
+    }
 
-    .remove-btn>button {
-        background-color: transparent !important;
+    /* INDIVIDUAL REMOVE BUTTON (✕) - Red Styling */
+    .remove-btn button {
+        background-color: #fef2f2 !important;
         color: #ef4444 !important;
         border: 1px solid #fee2e2 !important;
+        border-radius: 4px !important;
         font-size: 0.8rem !important;
+        padding: 2px 8px !important;
+    }
+    .remove-btn button:hover {
+        background-color: #fee2e2 !important;
+        border-color: #fecaca !important;
+    }
+
+    /* Green Metrics */
+    [data-testid="stMetricValue"] {
+        color: #059669 !important;
+        font-family: 'Roboto Mono', monospace;
+        font-weight: 800;
     }
 
     code {
@@ -99,6 +108,7 @@ with st.expander("Step 1: Define Available Promos", expanded=True):
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
             v = st.number_input("Boost/Refund %", min_value=1, value=50)
         with col3:
+            # Sports Filter tags will keep the red/default Streamlit appearance
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "NHL"])
         
         if st.form_submit_button("Add to Scan Queue"):
@@ -108,9 +118,9 @@ with st.expander("Step 1: Define Available Promos", expanded=True):
 if st.session_state.promos:
     st.subheader("Scan Queue")
     for i, p in enumerate(st.session_state.promos):
-        q_col1, q_col2 = st.columns([9, 1])
+        q_col1, q_col2 = st.columns([9.2, 0.8])
         with q_col1:
-            st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Boost: **{p['val']}%**")
+            st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Value: **{p['val']}%**")
         with q_col2:
             st.markdown('<div class="remove-btn">', unsafe_allow_html=True)
             if st.button("✕", key=f"rm_{i}"):
@@ -144,7 +154,6 @@ if st.session_state.promos:
                             st.session_state.api_quota = res.headers.get('x-requests-remaining', "0")
                             games = res.json()
                             for game in games:
-                                # Start time check
                                 commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                                 if commence_time <= now_utc: continue
 
@@ -175,7 +184,7 @@ if st.session_state.promos:
                                             h_amt = round((p['wager'] * sm) / (1 + hm))
                                             profit = min(((p['wager'] * sm) - h_amt), (h_amt * hm))
                                             rating = (profit / p['wager']) * 100
-                                        else: # No Sweat (assumes 70% conversion on refund)
+                                        else: # No Sweat
                                             mc = 0.70
                                             h_amt = round((p['wager'] * (sm + (1 - mc))) / (hm + 1))
                                             profit = min(((p['wager'] * sm) - h_amt), ((h_amt * hm) + (p['wager'] * mc) - p['wager']))
@@ -192,14 +201,14 @@ if st.session_state.promos:
                     except Exception as e: st.error(f"API Error: {e}")
                 status.update(label="Scanning Complete", state="complete")
 
-            # --- NEW DISPLAY LOGIC ---
             st.write(f"### Results for {p['book']}")
             sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
             if not sorted_opps:
-                st.warning("No high-value matches found.")
+                st.warning("No matches found within the selected books.")
             else:
                 for i, op in enumerate(sorted_opps[:5]):
-                    title = f"RANK {i+1} | {op['time']} | +${op['profit']:.2f} ({op['rating']:.1f}%)"
+                    roi_label = f"ROI: {op['rating']:.1f}%" if p['strat'] != "Profit Boost (%)" else f"Profit: ${op['profit']:.2f}"
+                    title = f"RANK {i+1} | {op['time']} | {roi_label}"
                     with st.expander(title):
                         st.write(f"**{op['game']}**")
                         c1, c2, c3 = st.columns(3)
