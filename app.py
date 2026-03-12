@@ -181,7 +181,7 @@ with st.expander("Promo Type", expanded=True):
         col1, col2, col3 = st.columns([2, 2, 1])
         with col1:
             b = st.selectbox("Source Book", list(book_map.keys()))
-            s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
+            s = st.selectbox("Promo Type", ["Profit Boost", "Bonus Bet", "No-Sweat Bet"])
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
             # CHANGED: Label back to Profit Boost (%)
@@ -236,3 +236,4 @@ if st.session_state.promos:
         for p in st.session_state.promos:
             results = run_promo_scan(p)
             display_results(results, p)
+
