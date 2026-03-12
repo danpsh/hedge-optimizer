@@ -33,8 +33,7 @@ book_map = {
     "BetMGM": "betmgm",
     "theScore / ESPN": "espnbet",
     "Bet365": "bet365",
-    "Caesars": "caesars",
-    "All Books": "allbooks"
+    "Caesars": "caesars"
 }
 
 sports_map = {
@@ -58,7 +57,7 @@ with st.expander("Step 1: Input your available promos", expanded=True):
     with st.form("gp_form"):
         ga, gb, gc = st.columns([2,2,1])
         with ga:
-            gp_b = st.selectbox("Book", list(book_map.keys())[:-1], key="gpb")
+            gp_b = st.selectbox("Book", list(book_map.keys()), key="gpb")
             gp_s = st.selectbox("Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], key="gps")
         with gb:
             gp_w = st.number_input("Wager amount ($)", min_value=1.0, value=25.0, key="gpw")
@@ -71,6 +70,9 @@ with st.expander("Step 1: Input your available promos", expanded=True):
 
     if st.session_state.promos:
         st.write("### Your promo list")
+        # Extract the list of bookmaker keys the user actually has
+        user_books = list(set([book_map[p['book']] for p in st.session_state.promos]))
+        
         for i, p in enumerate(st.session_state.promos):
             st.info(f"**{i+1}. {p['book']}** {p['strat']} (${p['wager']}) | Searching: {', '.join(p['sports'])}")
         
@@ -91,31 +93,35 @@ with st.expander("Step 1: Input your available promos", expanded=True):
                     st.write(f"## Best opportunities for: {p['book']} {p['strat']}")
                     
                     found_plays = []
-                    with st.spinner(f"Scanning upcoming {p['sports']} lines for {p['book']}..."):
+                    with st.spinner(f"Scanning upcoming {p['sports']} for matches on YOUR books..."):
                         for sport_label in p['sports']:
                             sport_key = sports_map[sport_label]
                             url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
-                            params = {'apiKey': api_key, 'regions': 'us,us2', 'markets': 'h2h', 'oddsFormat': 'american'}
+                            # We only request odds for the books the user has entered
+                            book_csv = ",".join(user_books)
+                            params = {'apiKey': api_key, 'regions': 'us,us2', 'markets': 'h2h', 'bookmakers': book_csv, 'oddsFormat': 'american'}
                             res = requests.get(url, params=params)
                             
                             if res.status_code == 200:
                                 games = res.json()
                                 for game in games:
-                                    # --- LIVE GAME FILTER ---
                                     commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                                     if commence_time <= now_utc:
-                                        continue  # Skip games that have already started or are live
+                                        continue 
                                     
                                     s_odds, h_odds = [], []
                                     for bm in game['bookmakers']:
                                         for m in bm['markets']:
                                             for o in m['outcomes']:
+                                                # Source side (the specific book for this promo)
                                                 if bm['key'] == book_map[p['book']]:
                                                     s_odds.append(o)
+                                                # Hedge side (can be ANY book the user has added to their list)
                                                 h_odds.append({'price': o['price'], 'team': o['name'], 'book': bm['title']})
                                     
                                     for so in s_odds:
                                         opp_team = next((t for t in [game['home_team'], game['away_team']] if t != so['name']), None)
+                                        # Only eligible hedges are from the user's specific pool of books
                                         eligible_h = [ho for ho in h_odds if ho['team'] == opp_team]
                                         if eligible_h:
                                             best_h = max(eligible_h, key=lambda x: x['price'])
@@ -153,18 +159,4 @@ with st.expander("Step 1: Input your available promos", expanded=True):
                                 c2.success(f"Hedge ${play['hamt']:.2f} on {play['h_book']} @ {play['h_price']:+}")
                                 c3.metric("Max profit", f"${play['profit']:.2f}")
                     else:
-                        st.info("No upcoming matchups found for this promo.")
-
-# --- QUICK CALCULATOR ---
-st.write("---")
-st.subheader("Quick hedge calculator")
-with st.expander("Manual check"):
-    m_col1, m_col2 = st.columns(2)
-    m_odds = m_col1.number_input("Promo odds", value=150)
-    m_hedge = m_col2.number_input("Best hedge odds", value=-140)
-    m_w = st.number_input("Promo wager amount", min_value=1.0, value=50.0)
-    if st.button("Calculate results"):
-        sm, hm = get_multiplier(m_odds), get_multiplier(m_hedge)
-        h_amt = (m_w * (1 + sm)) / (1 + hm)
-        st.write(f"**Hedge bet needed:** ${h_amt:.2f}")
-        st.write(f"**Guaranteed profit:** ${(m_w * sm) - h_amt:.2f}")
+                        st.info("No upcoming matchups found using only your available books.")
