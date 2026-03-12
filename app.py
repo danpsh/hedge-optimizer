@@ -47,7 +47,6 @@ st.markdown("""
         color: #ffffff;
     }
 
-    /* Small Remove Button Styling */
     .remove-btn>button {
         background-color: transparent !important;
         color: #ef4444 !important;
@@ -72,6 +71,7 @@ API_KEY = st.secrets.get("ODDS_API_KEY", "")
 def get_multiplier(american_odds):
     return (american_odds / 100) if american_odds > 0 else (100 / abs(american_odds))
 
+# THE ONLY ALLOWED BOOKS
 book_map = {
     "DraftKings": "draftkings", 
     "FanDuel": "fanduel",
@@ -97,7 +97,7 @@ with c_quota:
 
 st.divider()
 
-# --- INPUT AREA (ALWAYS OPEN) ---
+# --- INPUT AREA ---
 if 'promos' not in st.session_state: st.session_state.promos = []
 
 with st.expander("Step 1: Define Available Promos", expanded=True):
@@ -108,7 +108,7 @@ with st.expander("Step 1: Define Available Promos", expanded=True):
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=25.0)
-            v = st.number_input("Promo Value (Boost/Refund %)", min_value=1, value=50)
+            v = st.number_input("Boost/Refund %", min_value=1, value=50)
         with col3:
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "NHL"])
         
@@ -119,11 +119,11 @@ with st.expander("Step 1: Define Available Promos", expanded=True):
 if st.session_state.promos:
     st.subheader("Scan Queue")
     
-    # Render individual items with a remove option
     for i, p in enumerate(st.session_state.promos):
         q_col1, q_col2 = st.columns([9, 1])
         with q_col1:
-            st.info(f"**{p['book']}** | {p['strat']} (${p['wager']:.2f})")
+            # Updated to show wager and boost % clearly
+            st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Boost: **{p['val']}%**")
         with q_col2:
             st.markdown('<div class="remove-btn">', unsafe_allow_html=True)
             if st.button("✕", key=f"rm_{i}"):
@@ -140,10 +140,12 @@ if st.session_state.promos:
             st.rerun()
 
     if execute:
+        allowed_hedge_keys = list(book_map.values())
+        
         for p in st.session_state.promos:
             found_plays = []
             
-            with st.status(f"Scanning {p['book']} opportunities...", expanded=False) as status:
+            with st.status(f"Scanning {p['book']} against major books...", expanded=False) as status:
                 for sport_label in p['sports']:
                     sport_key = sports_map[sport_label]
                     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
@@ -158,13 +160,16 @@ if st.session_state.promos:
                             for game in games:
                                 source_outcomes, other_book_outcomes = [], []
                                 for bm in game['bookmakers']:
-                                    if bm['key'] == book_map[p['book']]:
-                                        source_outcomes = bm['markets'][0]['outcomes']
-                                    else:
-                                        for o in bm['markets'][0]['outcomes']:
-                                            other_book_outcomes.append({
-                                                'price': o['price'], 'team': o['name'], 'book': bm['title']
-                                            })
+                                    # ONLY look at our 4 allowed books
+                                    if bm['key'] in allowed_hedge_keys:
+                                        if bm['key'] == book_map[p['book']]:
+                                            source_outcomes = bm['markets'][0]['outcomes']
+                                        else:
+                                            # This outcome is on one of our other 3 allowed books
+                                            for o in bm['markets'][0]['outcomes']:
+                                                other_book_outcomes.append({
+                                                    'price': o['price'], 'team': o['name'], 'book': bm['title']
+                                                })
                                 
                                 if not source_outcomes or not other_book_outcomes: continue
 
@@ -194,7 +199,7 @@ if st.session_state.promos:
                                             "h_book": best_h['book'], "h_price": best_h['price']
                                         })
                     except Exception as e:
-                        st.error(f"Error connecting to API: {e}")
+                        st.error(f"API Error: {e}")
                 status.update(label="Scanning Complete", state="complete")
 
             top_plays = sorted(found_plays, key=lambda x: x['profit'], reverse=True)[:5]
@@ -214,7 +219,7 @@ if st.session_state.promos:
                             st.metric("Net Profit", f"${play['profit']:.2f}")
                         st.divider()
             else:
-                st.warning(f"No opportunities found for {p['book']}.")
+                st.warning(f"No opportunities found for {p['book']} within your 4 active books.")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
