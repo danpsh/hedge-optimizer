@@ -184,9 +184,9 @@ with st.expander("Promo Type", expanded=True):
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
-            v = st.number_input("Value (%)", min_value=1, value=50)
+            # CHANGED: Label back to Profit Boost (%)
+            v = st.number_input("Profit Boost (%)", min_value=1, value=50)
         with col3:
-            # FIXED: Started with an empty default list
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[])
         
         btn_col1, btn_col2 = st.columns(2)
@@ -216,7 +216,7 @@ if st.session_state.promos:
     for i, p in enumerate(st.session_state.promos):
         q_col1, q_col2 = st.columns([9.2, 0.8])
         with q_col1:
-            st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Value: **{p['val']}%**")
+            st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Profit Boost: **{p['val']}%**")
         with q_col2:
             st.markdown('<div class="remove-btn">', unsafe_allow_html=True)
             if st.button("✕", key=f"rm_{i}"):
