@@ -22,14 +22,12 @@ st.markdown("""
         margin-bottom: 0.5rem !important;
     }
 
-    /* Professional Cards */
     div[data-testid="stExpander"] {
         background-color: #ffffff !important;
         border: 1px solid #e2e8f0 !important;
         border-radius: 8px !important;
     }
 
-    /* Metrics */
     [data-testid="stMetricValue"] {
         color: #059669 !important;
         font-family: 'Roboto Mono', monospace;
@@ -37,7 +35,6 @@ st.markdown("""
         font-size: 1.6rem !important;
     }
     
-    /* Buttons */
     .stButton>button {
         background-color: #1e293b;
         color: #ffffff;
@@ -50,7 +47,15 @@ st.markdown("""
         color: #ffffff;
     }
 
-    /* Odds Display */
+    /* Small Remove Button Styling */
+    .remove-btn>button {
+        background-color: transparent !important;
+        color: #ef4444 !important;
+        border: 1px solid #fee2e2 !important;
+        font-size: 0.8rem !important;
+        padding: 0px 10px !important;
+    }
+
     code {
         color: #475569 !important;
         background-color: #f1f5f9 !important;
@@ -68,11 +73,12 @@ def get_multiplier(american_odds):
     return (american_odds / 100) if american_odds > 0 else (100 / abs(american_odds))
 
 book_map = {
-    "DraftKings": "draftkings", "FanDuel": "fanduel",
-    "theScore / ESPN": "espnbet", "BetMGM": "betmgm", "Caesars": "caesars"
+    "DraftKings": "draftkings", 
+    "FanDuel": "fanduel",
+    "theScore / ESPN": "espnbet", 
+    "BetMGM": "betmgm"
 }
 
-# Updated to include NHL
 sports_map = {
     "NBA": "basketball_nba",
     "NCAA Men's": "basketball_ncaab",
@@ -112,12 +118,22 @@ with st.expander("Step 1: Define Available Promos", expanded=True):
 # --- QUEUE & EXECUTION ---
 if st.session_state.promos:
     st.subheader("Scan Queue")
+    
+    # Render individual items with a remove option
     for i, p in enumerate(st.session_state.promos):
-        st.info(f"**{p['book']}** | {p['strat']} (${p['wager']:.2f})")
+        q_col1, q_col2 = st.columns([9, 1])
+        with q_col1:
+            st.info(f"**{p['book']}** | {p['strat']} (${p['wager']:.2f})")
+        with q_col2:
+            st.markdown('<div class="remove-btn">', unsafe_allow_html=True)
+            if st.button("✕", key=f"rm_{i}"):
+                st.session_state.promos.pop(i)
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
     
     run_col, clear_col = st.columns([4, 1])
     with run_col:
-        execute = st.button("Run Market Analysis", use_container_width=True)
+        execute = st.button("Identify Opportunities", use_container_width=True)
     with clear_col:
         if st.button("Clear All", use_container_width=True):
             st.session_state.promos = []
@@ -125,7 +141,6 @@ if st.session_state.promos:
 
     if execute:
         for p in st.session_state.promos:
-            st.write(f"### Best Markets: {p['book']}")
             found_plays = []
             
             with st.status(f"Scanning {p['book']} opportunities...", expanded=False) as status:
@@ -199,7 +214,7 @@ if st.session_state.promos:
                             st.metric("Net Profit", f"${play['profit']:.2f}")
                         st.divider()
             else:
-                st.warning("No matches found.")
+                st.warning(f"No opportunities found for {p['book']}.")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
