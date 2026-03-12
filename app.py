@@ -193,7 +193,7 @@ with st.expander("Promo Type", expanded=True):
         with btn_col1:
             add_to_q = st.form_submit_button("Add to Scan Queue", use_container_width=True)
         with btn_col2:
-            quick_scan = st.form_submit_button("Just Scan (Instant)", use_container_width=True)
+            quick_scan = st.form_submit_button("Quick Scan (Instant)", use_container_width=True)
 
 # --- QUICK SCAN ACTION ---
 if quick_scan:
@@ -238,3 +238,4 @@ if st.session_state.promos:
         for p in st.session_state.promos:
             results = run_promo_scan(p)
             display_results(results, p)
+
