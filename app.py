@@ -199,6 +199,7 @@ if run_multi_scan:
         st.warning("Please select at least one sport for the multi-scan.")
     else:
         multi_results = []
+        now_utc = datetime.now(timezone.utc)
         with st.spinner("Finding cross-book matches..."):
             for sport in multi_selected_sports:
                 url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
@@ -207,6 +208,9 @@ if run_multi_scan:
                 if res.status_code == 200:
                     games = res.json()
                     for game in games:
+                        commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                        if commence_time <= now_utc: continue 
+                        
                         odds_a, odds_b = [], []
                         for bm in game['bookmakers']:
                             for m in bm['markets']:
@@ -216,21 +220,16 @@ if run_multi_scan:
                         
                         for o_a in odds_a:
                             for o_b in odds_b:
-                                if o_a['name'] == o_b['name']: continue # Opposing teams only
+                                if o_a['name'] == o_b['name']: continue 
                                 m_a, m_b = get_multiplier(o_a['price']), get_multiplier(o_b['price'])
                                 
-                                # Side A Return Logic
                                 eff_m_a = m_a * (1 + a_boost/100) if a_strat == "Profit Boost (%)" else m_a
                                 loss_a_val = 0 if a_strat == "Bonus Bet" else (0.30 if a_strat == "No-Sweat Bet" else 1.0)
                                 
-                                # Side B Return Logic
                                 eff_m_b = m_b * (1 + b_boost/100) if b_strat == "Profit Boost (%)" else m_b
                                 loss_b_val = 0 if b_strat == "Bonus Bet" else (0.30 if b_strat == "No-Sweat Bet" else 1.0)
 
-                                # Perfect hedge ratio
                                 ratio = (eff_m_a + loss_a_val) / (eff_m_b + loss_b_val)
-                                
-                                # Stakes based on both caps
                                 final_w_a = a_wager_max
                                 final_w_b = final_w_a * ratio
                                 
@@ -238,11 +237,11 @@ if run_multi_scan:
                                     final_w_b = b_wager_max
                                     final_w_a = final_w_b / ratio
 
-                                # Profit Calculation
                                 profit = (final_w_a * eff_m_a) - (final_w_b * (1.0 if b_strat == "Cash (No promo)" or b_strat == "Profit Boost (%)" else (0.30 if b_strat == "No-Sweat Bet" else 0)))
                                 
                                 multi_results.append({
                                     "game": f"{game['away_team']} vs {game['home_team']}",
+                                    "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M%p"),
                                     "profit": profit, "w_a": final_w_a, "w_b": final_w_b, 
                                     "a_team": o_a['name'], "a_odds": o_a['price'],
                                     "b_team": o_b['name'], "b_odds": o_b['price'], "sport": sport.split('_')[-1].upper()
@@ -250,7 +249,7 @@ if run_multi_scan:
 
         top_multi = sorted(multi_results, key=lambda x: x['profit'], reverse=True)[:10]
         for i, item in enumerate(top_multi):
-            with st.expander(f"Multi-rank {i+1} ｜ {item['sport']} ｜ Profit: ${item['profit']:.2f}"):
+            with st.expander(f"Multi-rank {i+1} ｜ {item['sport']} ({item['time']}) ｜ Profit: ${item['profit']:.2f}"):
                 c1, c2, c3 = st.columns(3)
                 c1.info(f"**{a_book.upper()}**\n\nBet **${item['w_a']:.2f}** on {item['a_team']} @ **{item['a_odds']:+}**")
                 c2.success(f"**{b_book.upper()}**\n\nBet **${item['w_b']:.2f}** on {item['b_team']} @ **{item['b_odds']:+}**")
