@@ -5,54 +5,45 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Promo Converter", layout="wide")
 
-# --- BLOOMBERG LIGHT THEME ---
+# --- TECH LIGHT THEME ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono&display=swap');
     
-    .stApp {
-        background-color: #f8fafc;
-        color: #1e293b;
-        font-family: 'Inter', sans-serif;
-    }
+    .stApp { background-color: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; }
+    h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; }
 
-    h1, h2, h3 {
-        color: #0f172a !important;
-        font-weight: 700 !important;
-        margin-bottom: 0.5rem !important;
-    }
-
+    /* Expanders & Cards */
     div[data-testid="stExpander"] {
         background-color: #ffffff !important;
         border: 1px solid #e2e8f0 !important;
-        border-radius: 8px !important;
+        border-radius: 12px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
 
+    /* Green Metrics */
     [data-testid="stMetricValue"] {
-        color: #059669 !important;
+        color: #008f51 !important;
         font-family: 'Roboto Mono', monospace;
-        font-weight: 700;
+        font-weight: 800;
         font-size: 1.6rem !important;
     }
     
+    /* Dark Buttons with Green Text */
     .stButton>button {
-        background-color: #1e293b;
-        color: #ffffff;
+        background-color: #1e1e1e;
+        color: #00ff88;
         border: none;
-        border-radius: 6px;
-        font-weight: 600;
+        border-radius: 8px;
+        font-weight: bold;
     }
-    .stButton>button:hover {
-        background-color: #334155;
-        color: #ffffff;
-    }
+    .stButton>button:hover { color: #00ff88; border: 1px solid #00ff88; }
 
     .remove-btn>button {
         background-color: transparent !important;
         color: #ef4444 !important;
         border: 1px solid #fee2e2 !important;
         font-size: 0.8rem !important;
-        padding: 0px 10px !important;
     }
 
     code {
@@ -71,7 +62,6 @@ API_KEY = st.secrets.get("ODDS_API_KEY", "")
 def get_multiplier(american_odds):
     return (american_odds / 100) if american_odds > 0 else (100 / abs(american_odds))
 
-# THE ONLY ALLOWED BOOKS
 book_map = {
     "DraftKings": "draftkings", 
     "FanDuel": "fanduel",
@@ -91,9 +81,8 @@ c_title, c_quota = st.columns([3, 1])
 with c_title:
     st.title("Promo Converter")
 with c_quota:
-    if 'api_quota' not in st.session_state:
-        st.session_state.api_quota = "—"
-    st.metric("API Quota", st.session_state.api_quota)
+    if 'api_quota' not in st.session_state: st.session_state.api_quota = "—"
+    st.metric("API Quota Remaining", st.session_state.api_quota)
 
 st.divider()
 
@@ -107,7 +96,7 @@ with st.expander("Step 1: Define Available Promos", expanded=True):
             b = st.selectbox("Source Book", list(book_map.keys()))
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
-            w = st.number_input("Wager Amount ($)", min_value=1.0, value=25.0)
+            w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
             v = st.number_input("Boost/Refund %", min_value=1, value=50)
         with col3:
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "NHL"])
@@ -118,11 +107,9 @@ with st.expander("Step 1: Define Available Promos", expanded=True):
 # --- QUEUE & EXECUTION ---
 if st.session_state.promos:
     st.subheader("Scan Queue")
-    
     for i, p in enumerate(st.session_state.promos):
         q_col1, q_col2 = st.columns([9, 1])
         with q_col1:
-            # Updated to show wager and boost % clearly
             st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Boost: **{p['val']}%**")
         with q_col2:
             st.markdown('<div class="remove-btn">', unsafe_allow_html=True)
@@ -141,11 +128,11 @@ if st.session_state.promos:
 
     if execute:
         allowed_hedge_keys = list(book_map.values())
+        now_utc = datetime.now(timezone.utc)
         
         for p in st.session_state.promos:
-            found_plays = []
-            
-            with st.status(f"Scanning {p['book']} against major books...", expanded=False) as status:
+            all_opps = []
+            with st.status(f"Scanning markets for {p['book']}...", expanded=False) as status:
                 for sport_label in p['sports']:
                     sport_key = sports_map[sport_label]
                     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
@@ -156,73 +143,78 @@ if st.session_state.promos:
                         if res.status_code == 200:
                             st.session_state.api_quota = res.headers.get('x-requests-remaining', "0")
                             games = res.json()
-                            
                             for game in games:
-                                source_outcomes, other_book_outcomes = [], []
-                                for bm in game['bookmakers']:
-                                    # ONLY look at our 4 allowed books
-                                    if bm['key'] in allowed_hedge_keys:
-                                        if bm['key'] == book_map[p['book']]:
-                                            source_outcomes = bm['markets'][0]['outcomes']
-                                        else:
-                                            # This outcome is on one of our other 3 allowed books
-                                            for o in bm['markets'][0]['outcomes']:
-                                                other_book_outcomes.append({
-                                                    'price': o['price'], 'team': o['name'], 'book': bm['title']
-                                                })
-                                
-                                if not source_outcomes or not other_book_outcomes: continue
+                                # Start time check
+                                commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                                if commence_time <= now_utc: continue
 
-                                for so in source_outcomes:
-                                    opp_team = next(t for t in [game['home_team'], game['away_team']] if t != so['name'])
-                                    eligible_hedges = [ho for ho in other_book_outcomes if ho['team'] == opp_team]
-                                    
-                                    if eligible_hedges:
-                                        best_h = max(eligible_hedges, key=lambda x: x['price'])
-                                        sm, hm = get_multiplier(so['price']), get_multiplier(best_h['price'])
+                                source_odds, hedge_odds = [], []
+                                for bm in game['bookmakers']:
+                                    if bm['key'] in allowed_hedge_keys:
+                                        outcomes = bm['markets'][0]['outcomes']
+                                        for o in outcomes:
+                                            entry = {'book': bm['title'], 'team': o['name'], 'price': o['price']}
+                                            if bm['key'] == book_map[p['book']]: source_odds.append(entry)
+                                            else: hedge_odds.append(entry)
+                                
+                                if not source_odds or not hedge_odds: continue
+
+                                for s in source_odds:
+                                    opp_team = next(t for t in [game['home_team'], game['away_team']] if t != s['team'])
+                                    eligible = [h for h in hedge_odds if h['team'] == opp_team]
+                                    if eligible:
+                                        best_h = max(eligible, key=lambda x: x['price'])
+                                        sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
                                         
                                         if p['strat'] == "Profit Boost (%)":
                                             bsm = sm * (1 + (p['val']/100))
-                                            h_amt = (p['wager'] * (1 + bsm)) / (1 + hm)
-                                            profit = (p['wager'] * bsm) - h_amt
+                                            h_amt = round((p['wager'] * (1 + bsm)) / (1 + hm))
+                                            profit = min(((p['wager'] * bsm) - h_amt), ((h_amt * hm) - p['wager']))
+                                            rating = (profit / p['wager']) * 100
                                         elif p['strat'] == "Bonus Bet":
-                                            h_amt = (p['wager'] * sm) / (1 + hm)
-                                            profit = (p['wager'] * sm) - h_amt
-                                        else: # No Sweat
-                                            h_amt = (p['wager'] * (sm + (p['val']/100 * 0.7))) / (hm + 1)
-                                            profit = (p['wager'] * sm) - h_amt
+                                            h_amt = round((p['wager'] * sm) / (1 + hm))
+                                            profit = min(((p['wager'] * sm) - h_amt), (h_amt * hm))
+                                            rating = (profit / p['wager']) * 100
+                                        else: # No Sweat (assumes 70% conversion on refund)
+                                            mc = 0.70
+                                            h_amt = round((p['wager'] * (sm + (1 - mc))) / (hm + 1))
+                                            profit = min(((p['wager'] * sm) - h_amt), ((h_amt * hm) + (p['wager'] * mc) - p['wager']))
+                                            rating = (profit / p['wager']) * 100
 
-                                        found_plays.append({
-                                            "game": f"{game['away_team']} @ {game['home_team']}",
-                                            "profit": profit, "hamt": h_amt, "s_team": so['name'],
-                                            "s_price": so['price'], "h_team": best_h['team'],
-                                            "h_book": best_h['book'], "h_price": best_h['price']
-                                        })
-                    except Exception as e:
-                        st.error(f"API Error: {e}")
+                                        if profit > -2.0:
+                                            all_opps.append({
+                                                "game": f"{game['away_team']} vs {game['home_team']}",
+                                                "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
+                                                "profit": profit, "hedge": h_amt, "rating": rating,
+                                                "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
+                                                "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price']
+                                            })
+                    except Exception as e: st.error(f"API Error: {e}")
                 status.update(label="Scanning Complete", state="complete")
 
-            top_plays = sorted(found_plays, key=lambda x: x['profit'], reverse=True)[:5]
-            if top_plays:
-                for play in top_plays:
-                    with st.container():
-                        c1, c2, c3 = st.columns([3, 3, 2])
-                        with c1:
-                            st.caption(f"SOURCE: {p['book'].upper()}")
-                            st.markdown(f"**{play['s_team']}**")
-                            st.code(f"{play['s_price']:+} | Bet ${p['wager']:.2f}")
-                        with c2:
-                            st.caption(f"HEDGE: {play['h_book'].upper()}")
-                            st.markdown(f"**{play['h_team']}**")
-                            st.code(f"{play['h_price']:+} | Bet ${play['hamt']:.0f}")
-                        with c3:
-                            st.metric("Net Profit", f"${play['profit']:.2f}")
-                        st.divider()
+            # --- NEW DISPLAY LOGIC ---
+            st.write(f"### Results for {p['book']}")
+            sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
+            if not sorted_opps:
+                st.warning("No high-value matches found.")
             else:
-                st.warning(f"No opportunities found for {p['book']} within your 4 active books.")
+                for i, op in enumerate(sorted_opps[:5]):
+                    title = f"RANK {i+1} | {op['time']} | +${op['profit']:.2f} ({op['rating']:.1f}%)"
+                    with st.expander(title):
+                        st.write(f"**{op['game']}**")
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            st.caption(f"SOURCE: {op['s_book'].upper()}")
+                            st.info(f"Bet **${p['wager']:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
+                        with c2:
+                            st.caption(f"HEDGE: {op['h_book'].upper()}")
+                            st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
+                        with c3:
+                            st.metric("Net Profit", f"${op['profit']:.2f}")
+                            st.caption(f"Strategy: {p['strat']}")
+                st.divider()
 
 # --- MANUAL CALCULATOR ---
-st.write("---")
 st.write("### Manual Calculation")
 with st.expander("Open Calculator"):
     m_strat = st.radio("Conversion Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
@@ -245,6 +237,5 @@ with st.expander("Open Calculator"):
         else:
             ha = (mw_a * (sm_calc + (mv_v/100 * 0.7))) / (hm_calc + 1)
             pr = (mw_a * sm_calc) - ha
-            
         st.metric("Hedge Amount", f"${ha:.2f}")
         st.metric("Expected Profit", f"${pr:.2f}")
