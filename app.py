@@ -141,7 +141,8 @@ def run_promo_scan(p):
 
 def display_results(all_opps, p):
     st.write(f"### Results for {p['book']}")
-    st.caption(f"Strategy Applied: **{p['strat']} ({p['val']}%)**")
+    # This header keeps the context so you know which booster you are looking at
+    st.caption(f"Applied: **{p['strat']} ({p['val']}%)**")
     
     sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
     if not sorted_opps:
@@ -156,13 +157,13 @@ def display_results(all_opps, p):
                 with c1:
                     st.caption(f"SOURCE: {op['s_book'].upper()}")
                     st.info(f"Bet **${p['wager']:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
-                    st.caption(f"Includes {p['val']}% {p['strat']}")
+                    # REMOVED: "Includes XX% Strategy" caption here
                 with c2:
                     st.caption(f"HEDGE: {op['h_book'].upper()}")
                     st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
                 with c3:
                     st.metric("Net Profit", f"${op['profit']:.2f}")
-                    st.caption(f"Strategy: {p['strat']}")
+                    # REMOVED: "Strategy: XXX" caption here
     st.divider()
 
 # --- HEADER AREA ---
@@ -194,7 +195,7 @@ with st.expander("Promo Type", expanded=True):
         with btn_col1:
             add_to_q = st.form_submit_button("Add to Scan Queue", use_container_width=True)
         with btn_col2:
-            quick_scan = st.form_submit_button("Quick Scan (Instant)", use_container_width=True)
+            quick_scan = st.form_submit_button("Just Scan (Instant)", use_container_width=True)
 
 # --- QUICK SCAN ACTION ---
 if quick_scan:
@@ -231,4 +232,3 @@ if st.session_state.promos:
         for p in st.session_state.promos:
             results = run_promo_scan(p)
             display_results(results, p)
-
