@@ -27,12 +27,13 @@ st.markdown("""
         background-color: #ffffff;
         color: #1e1e1e;
         font-size: 12px;
+        font-family: 'JetBrains Mono', monospace;
         letter-spacing: 1px;
     }
     .stButton>button:hover {
         border-color: #000000;
-        background-color: #000000;
-        color: #ffffff;
+        background-color: #000000 !important;
+        color: #ffffff !important;
     }
     
     /* Cleaner Dividers */
@@ -41,7 +42,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- CONFIG & SECRETS ---
-# Ensure you have ODDS_API_KEY set in your Streamlit Secrets
 API_KEY = st.secrets.get("ODDS_API_KEY", "")
 
 # --- UTILS ---
@@ -58,18 +58,19 @@ sports_map = {
     "NHL": "icehockey_nhl", "MLB": "baseball_mlb", "MMA": "mma_mixed_martial_arts"
 }
 
-# --- SIDEBAR (STATUS ONLY) ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.overline("SYSTEM_STATUS")
+    st.caption("SYSTEM_STATUS")
     if 'api_quota' not in st.session_state:
-        st.session_state.api_quota = "0"
+        st.session_state.api_quota = "—"
     st.metric("API_REMAINING", st.session_state.api_quota)
+    
     if not API_KEY:
-        st.error("MISSING_API_KEY_IN_SECRETS")
+        st.error("MISSING_API_KEY")
 
 # --- MAIN INTERFACE ---
 st.title("PROMO_CONVERTER_V1")
-st.caption(f"SYSTEM TIME: {datetime.now().strftime('%H:%M:%S')}")
+st.text(f"UTC_TIME: {datetime.now(timezone.utc).strftime('%H:%M:%S')}")
 
 # --- PROMO QUEUE ---
 if 'promos' not in st.session_state: st.session_state.promos = []
@@ -81,7 +82,7 @@ with st.expander("NEW_ENTRY", expanded=not st.session_state.promos):
         s = st.selectbox("TYPE", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
     with c2:
         w = st.number_input("WAGER_USD", value=25.0, step=5.0)
-        v = st.number_input("BOOST_PERCENT", value=50)
+        v = st.number_input("BOOST/REFUND_%", value=50)
     with c3:
         sp = st.multiselect("SPORTS", list(sports_map.keys()), default=["NBA"])
     
@@ -104,10 +105,8 @@ if st.session_state.promos:
 
     if run_scan:
         if not API_KEY:
-            st.error("FATAL: NO API KEY DETECTED")
+            st.error("FATAL: API KEY NOT FOUND")
         else:
-            now_utc = datetime.now(timezone.utc)
-            
             for p in st.session_state.promos:
                 st.subheader(f"RESULTS: {p['book']}")
                 found_plays = []
@@ -125,7 +124,6 @@ if st.session_state.promos:
                                 games = res.json()
                                 
                                 for game in games:
-                                    # Identify Source vs Hedge Books
                                     source_outcomes = []
                                     other_book_outcomes = []
                                     
@@ -133,7 +131,6 @@ if st.session_state.promos:
                                         if bm['key'] == book_map[p['book']]:
                                             source_outcomes = bm['markets'][0]['outcomes']
                                         else:
-                                            # Logic Check: Hard filter against the same book
                                             for o in bm['markets'][0]['outcomes']:
                                                 other_book_outcomes.append({
                                                     'price': o['price'], 'team': o['name'], 'book': bm['title']
@@ -149,7 +146,6 @@ if st.session_state.promos:
                                             best_h = max(eligible_hedges, key=lambda x: x['price'])
                                             sm, hm = get_multiplier(so['price']), get_multiplier(best_h['price'])
                                             
-                                            # Strategy Math
                                             if p['strat'] == "Profit Boost (%)":
                                                 bsm = sm * (1 + (p['val']/100))
                                                 h_amt = (p['wager'] * (1 + bsm)) / (1 + hm)
@@ -157,8 +153,8 @@ if st.session_state.promos:
                                             elif p['strat'] == "Bonus Bet":
                                                 h_amt = (p['wager'] * sm) / (1 + hm)
                                                 profit = (p['wager'] * sm) - h_amt
-                                            else: # No Sweat
-                                                h_amt = (p['wager'] * (sm + 0.30)) / (hm + 1)
+                                            else: # No Sweat (Standard 70% conversion assumption)
+                                                h_amt = (p['wager'] * (sm + (p['val']/100 * 0.7))) / (hm + 1)
                                                 profit = (p['wager'] * sm) - h_amt
 
                                             found_plays.append({
@@ -168,10 +164,9 @@ if st.session_state.promos:
                                                 "h_book": best_h['book'], "h_price": best_h['price']
                                             })
                         except Exception as e:
-                            st.error(f"ERR: {str(e)}")
+                            st.error(f"API_ERROR: {str(e)}")
                     status.update(label="SCAN_COMPLETE", state="complete")
 
-                # Display Results Table-Style
                 top_plays = sorted(found_plays, key=lambda x: x['profit'], reverse=True)[:5]
                 if top_plays:
                     for play in top_plays:
@@ -185,3 +180,35 @@ if st.session_state.promos:
                         st.divider()
                 else:
                     st.warning("NO_MATCHES_FOUND")
+
+# --- MANUAL CALCULATOR ---
+st.write("---")
+st.caption("MANUAL_OVERRIDE")
+with st.expander("OPEN_CALCULATOR"):
+    with st.form("manual_form"):
+        m_strat = st.radio("STRATEGY", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
+        mc1, mc2 = st.columns(2)
+        with mc1:
+            m_s_p = st.number_input("SOURCE_ODDS", value=250)
+            m_w = st.number_input("WAGER_AMOUNT", value=50.0)
+            m_b = st.number_input("BOOST/REFUND_%", value=50)
+        with mc2:
+            m_h_p = st.number_input("HEDGE_ODDS", value=-280)
+        
+        if st.form_submit_button("CALCULATE_HEDGE"):
+            sm, hm = get_multiplier(m_s_p), get_multiplier(m_h_p)
+            if m_strat == "Profit Boost (%)":
+                bsm = sm * (1 + (m_b/100))
+                h_amt = (m_w * (1 + bsm)) / (1 + hm)
+                profit = (m_w * bsm) - h_amt
+            elif m_strat == "Bonus Bet":
+                h_amt = (m_w * sm) / (1 + hm)
+                profit = (m_w * sm) - h_amt
+            else:
+                h_amt = (m_w * (sm + (m_b/100 * 0.7))) / (hm + 1)
+                profit = (m_w * sm) - h_amt
+            
+            st.divider()
+            r1, r2 = st.columns(2)
+            r1.metric("HEDGE_AMOUNT", f"${h_amt:.0f}")
+            r2.metric("EXPECTED_PROFIT", f"${profit:.2f}")
