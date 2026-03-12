@@ -244,55 +244,97 @@ with st.expander("Open Manual Calculator", expanded=False):
             except: 
                 st.error("Please enter valid numbers.")
 
-# --- CROSS-BOOK PROMO OPTIMIZER ---
+# --- AUTOMATED MULTI-PROMO OPTIMIZER ---
 st.write("---")
-st.subheader("🔄 Multi-Promo Optimizer")
-with st.expander("Combine Two Different Promos", expanded=False):
-    with st.form("cross_book_form"):
-        left, right = st.columns(2)
-        with left:
-            st.markdown("### Side A")
-            strat_a = st.selectbox("Strategy A", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], key="sa")
-            odds_a = st.number_input("Odds A", value=200, key="oa")
-            wager_a = st.number_input("Wager A ($)", value=50.0, key="wa")
-            boost_a = st.number_input("Boost A %", value=0, key="ba")
-            refund_a = st.slider("Refund A % (No-Sweat)", 0, 100, 70, key="ra")
-        with right:
-            st.markdown("### Side B")
-            strat_b = st.selectbox("Strategy B", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], key="sb")
-            odds_b = st.number_input("Odds B", value=-220, key="ob")
-            boost_b = st.number_input("Boost B %", value=0, key="bb")
-            refund_b = st.slider("Refund B % (No-Sweat)", 0, 100, 70, key="rb")
-
-        if st.form_submit_button("Optimize Both Sides", use_container_width=True):
-            m_a, m_b = get_multiplier(odds_a), get_multiplier(odds_b)
+st.subheader("🔄 Multi-Promo Scanner (Auto-API)")
+with st.expander("Find Top 10 Multi-Promo Opportunities", expanded=True):
+    with st.form("auto_multi_promo"):
+        col_l, col_r = st.columns(2)
+        with col_l:
+            st.markdown("### Side A (Promo 1)")
+            auto_strat_a = st.selectbox("Type A", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], key="asa")
+            auto_book_a = st.selectbox("Book A", ["draftkings", "fanduel", "betmgm", "espnbet"], key="aba")
+            auto_wager_a = st.number_input("Wager/Max A ($)", value=50.0)
+            auto_boost_a = st.number_input("Boost A %", value=50) if auto_strat_a == "Profit Boost (%)" else 0
             
-            # SIDE A Logic
-            if strat_a == "Profit Boost (%)":
-                win_a = wager_a * m_a * (1 + boost_a/100)
-                loss_a = -wager_a
-            elif strat_a == "Bonus Bet":
-                win_a = wager_a * m_a
-                loss_a = 0
-            else: # No-Sweat
-                win_a = wager_a * m_a
-                loss_a = -wager_a * (1 - (refund_a/100))
+        with col_r:
+            st.markdown("### Side B (Promo 2)")
+            auto_strat_b = st.selectbox("Type B", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet", "Cash (No Promo)"], key="asb")
+            auto_book_b = st.selectbox("Book B", ["fanduel", "draftkings", "betmgm", "espnbet", "bet365"], key="abb")
+            auto_boost_b = st.number_input("Boost B %", value=0) if auto_strat_b == "Profit Boost (%)" else 0
 
-            # Solve for Wager B
-            if strat_b == "Profit Boost (%)":
-                wager_b = (win_a - loss_a) / (m_b * (1 + boost_b/100) + 1)
-            elif strat_b == "Bonus Bet":
-                wager_b = (win_a - loss_a) / m_b
-            else: # No-Sweat
-                wager_b = (win_a - loss_a) / (m_b + (1 - refund_b/100))
+        st.info("This will scan live games and find the best 10 matches where these two promos interact.")
+        run_multi_scan = st.form_submit_button("Scan Multi-Promo Markets", use_container_width=True)
 
-            # Scenario Results
-            pa = win_a - (wager_b if strat_b != "Bonus Bet" else 0)
-            if strat_b == "No-Sweat Bet": pa = win_a - (wager_b * (1 - refund_b/100))
-            pb = (wager_b * m_b * (1 + boost_b/100 if strat_b=="Profit Boost (%)" else 1)) + loss_a
+if run_multi_scan:
+    api_key = st.secrets.get("ODDS_API_KEY", "")
+    if not api_key:
+        st.error("API Key missing.")
+    else:
+        results = []
+        # We scan all sports from your main list
+        with st.spinner(f"Matching {auto_book_a} promos against {auto_book_b}..."):
+            for sport in selected_sports:
+                url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
+                params = {'apiKey': api_key, 'regions': 'us,us2', 'markets': 'h2h', 'bookmakers': f"{auto_book_a},{auto_book_b}"}
+                res = requests.get(url, params=params)
+                
+                if res.status_code == 200:
+                    games = res.json()
+                    for game in games:
+                        odds_a, odds_b = [], []
+                        for bm in game['bookmakers']:
+                            for m in bm['markets']:
+                                for o in m['outcomes']:
+                                    d = {'team': o['name'], 'price': o['price']}
+                                    if bm['key'] == auto_book_a: odds_a.append(d)
+                                    if bm['key'] == auto_book_b: odds_b.append(d)
+                        
+                        # Compare outcomes (Team 1 on Book A vs Team 2 on Book B)
+                        for s_a in odds_a:
+                            for s_b in odds_b:
+                                if s_a['team'] == s_b['team']: continue # Can't bet same side
+                                
+                                m_a, m_b = get_multiplier(s_a['price']), get_multiplier(s_b['price'])
+                                
+                                # Logic for Side A
+                                if auto_strat_a == "Profit Boost (%)":
+                                    win_a, loss_a = (auto_wager_a * m_a * (1 + auto_boost_a/100)), -auto_wager_a
+                                elif auto_strat_a == "Bonus Bet":
+                                    win_a, loss_a = (auto_wager_a * m_a), 0
+                                else: # No-Sweat
+                                    win_a, loss_a = (auto_wager_a * m_a), -auto_wager_a * 0.30
 
-            st.divider()
-            rc1, rc2, rc3 = st.columns(3)
-            rc1.metric("Bet on Side B", f"${wager_b:.2f}")
-            rc2.metric("Guaranteed Profit", f"${(pa+pb)/2:.2f}")
-            rc3.metric("ROI", f"{(((pa+pb)/2)/wager_a*100):.1f}%")
+                                # Calculate Optimal Hedge for Side B
+                                if auto_strat_b == "Profit Boost (%)":
+                                    w_b = (win_a - loss_a) / (m_b * (1 + auto_boost_b/100) + 1)
+                                    win_b_total = (w_b * m_b * (1 + auto_boost_b/100)) + loss_a
+                                elif auto_strat_b == "Bonus Bet":
+                                    w_b = (win_a - loss_a) / m_b
+                                    win_b_total = (w_b * m_b) + loss_a
+                                elif auto_strat_b == "No-Sweat Bet":
+                                    w_b = (win_a - loss_a) / (m_b + 0.70)
+                                    win_b_total = (w_b * m_b) + loss_a
+                                else: # Pure Cash
+                                    w_b = (win_a - loss_a) / (m_b + 1)
+                                    win_b_total = (w_b * m_b) + loss_a
+
+                                profit = (win_a - w_b + win_b_total) / 2 # Balanced profit
+                                
+                                results.append({
+                                    "game": f"{game['away_team']} vs {game['home_team']}",
+                                    "profit": profit, "w_b": w_b,
+                                    "a_team": s_a['team'], "a_odds": s_a['price'],
+                                    "b_team": s_b['team'], "b_odds": s_b['price']
+                                })
+
+        # Sort and Display Top 10
+        top_results = sorted(results, key=lambda x: x['profit'], reverse=True)[:10]
+        for item in top_results:
+            with st.container():
+                st.markdown(f"#### {item['game']} | Profit: **${item['profit']:.2f}**")
+                c1, c2 = st.columns(2)
+                c1.write(f"**{auto_book_a}**: ${auto_wager_a} on {item['a_team']} @ {item['a_odds']:+}")
+                c2.write(f"**{auto_book_b}**: ${item['w_b']:.2f} on {item['b_team']} @ {item['b_odds']:+}")
+                st.divider()
+
