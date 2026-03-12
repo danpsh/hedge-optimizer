@@ -28,13 +28,10 @@ st.markdown("""
         border: none !important;
         border-radius: 6px !important;
         font-weight: 600 !important;
-        transition: background-color 0.2s;
     }
-    .stButton>button:hover {
-        background-color: #334155 !important;
-    }
+    .stButton>button:hover { background-color: #334155 !important; }
 
-    /* INDIVIDUAL REMOVE BUTTON (✕) - Red Styling */
+    /* INDIVIDUAL REMOVE BUTTON (✕) */
     .remove-btn button {
         background-color: #fef2f2 !important;
         color: #ef4444 !important;
@@ -42,10 +39,6 @@ st.markdown("""
         border-radius: 4px !important;
         font-size: 0.8rem !important;
         padding: 2px 8px !important;
-    }
-    .remove-btn button:hover {
-        background-color: #fee2e2 !important;
-        border-color: #fecaca !important;
     }
 
     /* Green Metrics */
@@ -106,9 +99,8 @@ with st.expander("Step 1: Define Available Promos", expanded=True):
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
-            v = st.number_input("Boost/Refund %", min_value=1, value=50)
+            v = st.number_input("Promo Value (Boost/Refund %)", min_value=1, value=50)
         with col3:
-            # Sports Filter tags will keep the red/default Streamlit appearance
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "NHL"])
         
         if st.form_submit_button("Add to Scan Queue"):
@@ -201,20 +193,26 @@ if st.session_state.promos:
                     except Exception as e: st.error(f"API Error: {e}")
                 status.update(label="Scanning Complete", state="complete")
 
+            # --- UPDATED RESULTS SECTION ---
             st.write(f"### Results for {p['book']}")
+            st.caption(f"Strategy Applied: **{p['strat']} ({p['val']}%)**") # Added clarification line
+            
             sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
             if not sorted_opps:
                 st.warning("No matches found within the selected books.")
             else:
                 for i, op in enumerate(sorted_opps[:5]):
+                    # Dynamic label for the header
                     roi_label = f"ROI: {op['rating']:.1f}%" if p['strat'] != "Profit Boost (%)" else f"Profit: ${op['profit']:.2f}"
                     title = f"RANK {i+1} | {op['time']} | {roi_label}"
+                    
                     with st.expander(title):
                         st.write(f"**{op['game']}**")
                         c1, c2, c3 = st.columns(3)
                         with c1:
                             st.caption(f"SOURCE: {op['s_book'].upper()}")
                             st.info(f"Bet **${p['wager']:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
+                            st.caption(f"Includes {p['val']}% {p['strat']}") # Added to inside the card
                         with c2:
                             st.caption(f"HEDGE: {op['h_book'].upper()}")
                             st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
