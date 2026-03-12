@@ -143,13 +143,13 @@ def display_results(all_opps, p):
     st.write(f"### Results for {p['book']}")
     st.caption(f"Applied: **{p['strat']} ({p['val']}%)**")
     
-    sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
+    sorted_opps = sorted(all_opps, key=lambda x: x['profit'], reverse=True)
     if not sorted_opps:
         st.warning(f"No matches found for {p['book']}.")
     else:
         for i, op in enumerate(sorted_opps[:5]):
-            roi_label = f"ROI: {op['rating']:.1f}%" if p['strat'] != "Profit Boost (%)" else f"Profit: ${op['profit']:.2f}"
-            title = f"RANK {i+1} | {op['time']} | {roi_label}"
+            # UPDATED: Replaced ROI with Profit $ in the title
+            title = f"RANK {i+1} | {op['time']} | Profit: ${op['profit']:.2f}"
             with st.expander(title):
                 st.write(f"**{op['game']}**")
                 c1, c2, c3 = st.columns(3)
@@ -181,10 +181,9 @@ with st.expander("Promo Type", expanded=True):
         col1, col2, col3 = st.columns([2, 2, 1])
         with col1:
             b = st.selectbox("Source Book", list(book_map.keys()))
-            s = st.selectbox("Promo Type", ["Profit Boost", "Bonus Bet", "No-Sweat Bet"])
+            s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
-            # CHANGED: Label back to Profit Boost (%)
             v = st.number_input("Profit Boost (%)", min_value=1, value=50)
         with col3:
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[])
@@ -236,4 +235,3 @@ if st.session_state.promos:
         for p in st.session_state.promos:
             results = run_promo_scan(p)
             display_results(results, p)
-
