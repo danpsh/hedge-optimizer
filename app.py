@@ -84,7 +84,7 @@ st.divider()
 # --- INPUT AREA ---
 if 'promos' not in st.session_state: st.session_state.promos = []
 
-with st.expander("Step 1: Define Available Promos", expanded=True):
+with st.expander("Promo Type", expanded=True):
     with st.form("promo_form", clear_on_submit=True):
         col1, col2, col3 = st.columns([2, 2, 1])
         with col1:
@@ -92,7 +92,7 @@ with st.expander("Step 1: Define Available Promos", expanded=True):
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
-            v = st.number_input("Promo Value (Boost/Refund %)", min_value=1, value=50)
+            v = st.number_input("Profit Boost)", min_value=1, value=50)
         with col3:
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "NHL"])
         
@@ -216,3 +216,4 @@ if st.session_state.promos:
                             st.metric("Net Profit", f"${op['profit']:.2f}")
                             st.caption(f"Strategy: {p['strat']}")
                 st.divider()
+
