@@ -141,7 +141,6 @@ def run_promo_scan(p):
 
 def display_results(all_opps, p):
     st.write(f"### Results for {p['book']}")
-    # This header keeps the context so you know which booster you are looking at
     st.caption(f"Applied: **{p['strat']} ({p['val']}%)**")
     
     sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
@@ -157,13 +156,11 @@ def display_results(all_opps, p):
                 with c1:
                     st.caption(f"SOURCE: {op['s_book'].upper()}")
                     st.info(f"Bet **${p['wager']:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
-                    # REMOVED: "Includes XX% Strategy" caption here
                 with c2:
                     st.caption(f"HEDGE: {op['h_book'].upper()}")
                     st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
                 with c3:
                     st.metric("Net Profit", f"${op['profit']:.2f}")
-                    # REMOVED: "Strategy: XXX" caption here
     st.divider()
 
 # --- HEADER AREA ---
@@ -187,9 +184,10 @@ with st.expander("Promo Type", expanded=True):
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
-            v = st.number_input("Profit Boost (%)", min_value=1, value=50)
+            v = st.number_input("Value (%)", min_value=1, value=50)
         with col3:
-            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "NHL"])
+            # FIXED: Started with an empty default list
+            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[])
         
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
@@ -199,13 +197,19 @@ with st.expander("Promo Type", expanded=True):
 
 # --- QUICK SCAN ACTION ---
 if quick_scan:
-    temp_p = {"book": b, "strat": s, "wager": w, "val": v, "sports": sp}
-    results = run_promo_scan(temp_p)
-    display_results(results, temp_p)
+    if not sp:
+        st.error("Please select at least one sport to scan.")
+    else:
+        temp_p = {"book": b, "strat": s, "wager": w, "val": v, "sports": sp}
+        results = run_promo_scan(temp_p)
+        display_results(results, temp_p)
 
 # --- QUEUE LOGIC ---
 if add_to_q:
-    st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp})
+    if not sp:
+        st.error("Please select at least one sport before adding to queue.")
+    else:
+        st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp})
 
 if st.session_state.promos:
     st.subheader("Scan Queue")
