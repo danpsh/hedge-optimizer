@@ -92,7 +92,7 @@ with st.expander("Promo Type", expanded=True):
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
-            v = st.number_input("Profit Boost)", min_value=1, value=50)
+            v = st.number_input("Profit Boost", min_value=1, value=50)
         with col3:
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "NHL"])
         
@@ -216,6 +216,7 @@ if st.session_state.promos:
                             st.metric("Net Profit", f"${op['profit']:.2f}")
                             st.caption(f"Strategy: {p['strat']}")
                 st.divider()
+
 
 
 
