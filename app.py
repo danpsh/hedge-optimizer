@@ -50,67 +50,9 @@ sport_labels = list(sports_map.keys())
 st.title("Promo Converter")
 quota_placeholder = st.empty()
 
-# --- SECTION 1: GLOBAL SCANNER ---
-st.subheader("Global scanner")
-with st.expander("Scan all markets for a specific promo type", expanded=False):
-    with st.form("global_scan_form"):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            g_strat = st.radio("Strategy", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
-        with c2:
-            g_book = st.selectbox("Source book", list(book_map.keys())[:-1])
-        with c3:
-            g_hedge = st.selectbox("Hedge book", list(book_map.keys()))
-        
-        g_sports = st.multiselect("Sports", sport_labels, default=["NBA", "NHL"])
-        col_w, col_b = st.columns(2)
-        g_wager = col_w.number_input("Wager ($)", value=50.0)
-        g_boost = col_b.number_input("Boost (%)", value=50) if g_strat == "Profit Boost (%)" else 0
-        
-        run_g = st.form_submit_button("Run global scanner", use_container_width=True)
-
-# --- SECTION 2: MULTI-PROMO OPTIMIZER ---
-st.write("---")
-st.subheader("Multi-promo optimizer")
-with st.expander("Run two promos against each other (Cross-arb)", expanded=False):
-    with st.form("multi_scan_form"):
-        ml, mr = st.columns(2)
-        with ml:
-            st.markdown("**Side A**")
-            ma_strat = st.selectbox("Strategy A", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], key="ma1")
-            ma_book = st.selectbox("Book A", ["draftkings", "fanduel", "betmgm", "espnbet"], key="ma2")
-            ma_wager = st.number_input("Max wager A ($)", value=50.0, key="ma3")
-            ma_boost = st.number_input("Boost A (%)", value=50, key="ma4") if ma_strat == "Profit Boost (%)" else 0
-        with mr:
-            st.markdown("**Side B**")
-            mb_strat = st.selectbox("Strategy B", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet", "Cash"], key="mb1")
-            mb_book = st.selectbox("Book B", ["fanduel", "draftkings", "betmgm", "espnbet"], key="mb2")
-            mb_wager = st.number_input("Max wager B ($)", value=50.0, key="mb3")
-            mb_boost = st.number_input("Boost B (%)", value=0, key="mb4") if mb_strat == "Profit Boost (%)" else 0
-        
-        m_sports = st.multiselect("Sports", sport_labels, default=["NBA", "NHL"], key="ms")
-        run_m = st.form_submit_button("Run cross-promo optimizer", use_container_width=True)
-
-# --- SECTION 3: SINGLE PROMO TARGETER ---
-st.write("---")
-st.subheader("Single promo targeter")
-with st.expander("Find the best play for one specific boost", expanded=False):
-    with st.form("target_form"):
-        t_col1, t_col2 = st.columns(2)
-        with t_col1:
-            t_book = st.selectbox("Sportsbook", ["draftkings", "fanduel", "betmgm", "espnbet"], key="t1")
-            t_strat = st.selectbox("Boost type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], key="t2")
-        with t_col2:
-            t_wager = st.number_input("Wager ($)", value=50.0, key="t3")
-            t_boost = st.number_input("Boost (%)", value=50, key="t4") if t_strat == "Profit Boost (%)" else 0
-        
-        t_sports = st.multiselect("Sports", sport_labels, default=["NBA"], key="t5")
-        run_t = st.form_submit_button("Find best play", use_container_width=True)
-
-# --- SECTION 4: GAMEPLAN ARCHITECT ---
-st.write("---")
+# --- GAMEPLAN ARCHITECT ---
 st.subheader("Gameplan architect")
-with st.expander("Build your daily betting strategy", expanded=True):
+with st.expander("Step 1: Input your available promos", expanded=True):
     if 'promos' not in st.session_state: st.session_state.promos = []
 
     with st.form("gp_form"):
@@ -119,49 +61,106 @@ with st.expander("Build your daily betting strategy", expanded=True):
             gp_b = st.selectbox("Book", list(book_map.keys())[:-1], key="gpb")
             gp_s = st.selectbox("Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], key="gps")
         with gb:
-            gp_w = st.number_input("Wager", value=25.0, key="gpw")
-            gp_v = st.number_input("Boost %", value=50, key="gpv")
+            gp_w = st.number_input("Wager amount ($)", value=25.0, key="gpw")
+            gp_v = st.number_input("Boost % (if applicable)", value=50, key="gpv")
         with gc:
-            gp_sp = st.multiselect("Sports", sport_labels, default=["NBA"], key="gpsp")
+            gp_sp = st.multiselect("Sports to search", sport_labels, default=["NBA"], key="gpsp")
         
-        if st.form_submit_button("Add to gameplan"):
+        if st.form_submit_button("Add promo to list"):
             st.session_state.promos.append({"book": gp_b, "strat": gp_s, "wager": gp_w, "val": gp_v, "sports": gp_sp})
 
     if st.session_state.promos:
+        st.write("### Your promo list")
         for i, p in enumerate(st.session_state.promos):
-            st.write(f"**{i+1}. {p['book']}** {p['strat']} (${p['wager']})")
+            st.info(f"**{i+1}. {p['book']}** {p['strat']} (${p['wager']}) | Searching: {', '.join(p['sports'])}")
         
-        if st.button("Clear all"): 
+        if st.button("Clear list"): 
             st.session_state.promos = []
             st.rerun()
 
-        mode = st.radio("Execution mode", ["Independent (Max EV)", "Cross-Arb (Guaranteed Cash)"], horizontal=True)
+        st.divider()
+        api_key = st.secrets.get("ODDS_API_KEY", "")
         
-        if st.button("Generate gameplan"):
-            st.write("### Recommended gameplan")
-            if mode == "Independent (Max EV)":
-                for p in st.session_state.promos:
-                    if p['strat'] == "Bonus Bet":
-                        st.success(f"**{p['book']} Strategy:** Place on an Underdog (+250 to +400). Hedge on a different book to convert ~70%.")
-                    elif p['strat'] == "Profit Boost (%)":
-                        st.success(f"**{p['book']} Strategy:** Place on a tight Pick-em (-110). Hedge to lock in ~20% of stake.")
-                    else:
-                        st.success(f"**{p['book']} Strategy:** Place on a slight Underdog (+120). Use the refund as a Bonus Bet if it loses.")
+        if st.button("Generate live gameplan", use_container_width=True):
+            if not api_key:
+                st.error("Missing API Key in secrets.")
             else:
-                st.info("Scanner running cross-reference between your added promos... (Connect API to see live matches)")
+                for p in st.session_state.promos:
+                    st.write(f"## Best opportunities for: {p['book']} {p['strat']}")
+                    
+                    found_plays = []
+                    with st.spinner(f"Scanning all {p['sports']} lines for {p['book']}..."):
+                        for sport_label in p['sports']:
+                            sport_key = sports_map[sport_label]
+                            url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
+                            params = {'apiKey': api_key, 'regions': 'us,us2', 'markets': 'h2h', 'oddsFormat': 'american'}
+                            res = requests.get(url, params=params)
+                            
+                            if res.status_code == 200:
+                                games = res.json()
+                                for game in games:
+                                    s_odds, h_odds = [], []
+                                    for bm in game['bookmakers']:
+                                        for m in bm['markets']:
+                                            for o in m['outcomes']:
+                                                # Look at all odds, no filtering
+                                                if bm['key'] == book_map[p['book']]:
+                                                    s_odds.append(o)
+                                                h_odds.append({'price': o['price'], 'team': o['name'], 'book': bm['title']})
+                                    
+                                    for so in s_odds:
+                                        opp_team = next((t for t in [game['home_team'], game['away_team']] if t != so['name']), None)
+                                        eligible_h = [ho for ho in h_odds if ho['team'] == opp_team]
+                                        if eligible_h:
+                                            # Pick the best hedge available globally
+                                            best_h = max(eligible_h, key=lambda x: x['price'])
+                                            
+                                            sm, hm = get_multiplier(so['price']), get_multiplier(best_h['price'])
+                                            
+                                            if p['strat'] == "Profit Boost (%)":
+                                                boosted_sm = sm * (1 + (p['val']/100))
+                                                hamt = (p['wager'] * (1 + boosted_sm)) / (1 + hm)
+                                                profit = (p['wager'] * boosted_sm) - hamt
+                                            elif p['strat'] == "Bonus Bet":
+                                                # Stake not returned logic
+                                                hamt = (p['wager'] * sm) / (1 + hm)
+                                                profit = (p['wager'] * sm) - hamt
+                                            else: # No-Sweat (Refund evaluated at ~70%)
+                                                hamt = (p['wager'] * (sm + 0.30)) / (hm + 1)
+                                                profit = (p['wager'] * sm) - hamt
+
+                                            found_plays.append({
+                                                "game": f"{game['away_team']} vs {game['home_team']}",
+                                                "profit": profit, "hamt": hamt, "s_team": so['name'],
+                                                "s_price": so['price'], "h_team": best_h['team'],
+                                                "h_book": best_h['book'], "h_price": best_h['price'],
+                                                "sport": sport_label
+                                            })
+
+                    # Rank everything by raw profit and show the top 5
+                    top_plays = sorted(found_plays, key=lambda x: x['profit'], reverse=True)[:5]
+                    
+                    if top_plays:
+                        for play in top_plays:
+                            with st.container():
+                                st.markdown(f"**{play['game']}** ({play['sport']})")
+                                c1, c2, c3 = st.columns(3)
+                                c1.info(f"Bet ${p['wager']} on {play['s_team']} @ {play['s_price']:+}")
+                                c2.success(f"Hedge ${play['hamt']:.2f} on {play['h_book']} @ {play['h_price']:+}")
+                                c3.metric("Max profit", f"${play['profit']:.2f}")
+                    else:
+                        st.info("No matchups found for this promo.")
 
 # --- MANUAL CALCULATOR ---
 st.write("---")
-st.subheader("Manual calculator")
-with st.expander("Quick hedge tool"):
-    m_odds = st.number_input("Source odds", value=200)
-    m_hedge = st.number_input("Hedge odds", value=-220)
-    m_w = st.number_input("Wager", value=50.0)
-    if st.button("Calculate"):
+st.subheader("Quick hedge calculator")
+with st.expander("Manual check"):
+    m_col1, m_col2 = st.columns(2)
+    m_odds = m_col1.number_input("Promo odds", value=150)
+    m_hedge = m_col2.number_input("Best hedge odds", value=-140)
+    m_w = st.number_input("Promo wager amount", value=50.0)
+    if st.button("Calculate results"):
         sm, hm = get_multiplier(m_odds), get_multiplier(m_hedge)
         h_amt = (m_w * (1 + sm)) / (1 + hm)
-        st.metric("Hedge bet", f"${h_amt:.2f}")
-        st.metric("Net profit", f"${(m_w * sm) - h_amt:.2f}")
-
-# --- API LOGIC PLACEHOLDER ---
-# Note: To run live, ensure 'ODDS_API_KEY' is in your Streamlit Secrets.
+        st.write(f"**Hedge bet needed:** ${h_amt:.2f}")
+        st.write(f"**Guaranteed profit:** ${(m_w * sm) - h_amt:.2f}")
