@@ -56,11 +56,10 @@ API_KEY = st.secrets.get("ODDS_API_KEY", "")
 def get_multiplier(american_odds):
     return (american_odds / 100) if american_odds > 0 else (100 / abs(american_odds))
 
-# Updated mapping to ensure compatibility with API keys
 book_map = {
     "DraftKings": "draftkings", 
     "FanDuel": "fanduel",
-    "theScore / ESPN": "espnbet", # Official API key for both is 'espnbet'
+    "theScore / ESPN": "espnbet", 
     "BetMGM": "betmgm"
 }
 
@@ -70,6 +69,101 @@ sports_map = {
     "NCAA Women's": "basketball_ncaaw",
     "NHL": "icehockey_nhl"
 }
+
+# --- SCAN ENGINE ---
+def run_promo_scan(p):
+    allowed_book_keys = list(book_map.values())
+    now_utc = datetime.now(timezone.utc)
+    all_opps = []
+    
+    with st.status(f"Scanning markets for {p['book']}...", expanded=False) as status:
+        for sport_label in p['sports']:
+            sport_key = sports_map[sport_label]
+            url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
+            params = {
+                'apiKey': API_KEY, 
+                'regions': 'us,us2', 
+                'markets': 'h2h', 
+                'oddsFormat': 'american'
+            }
+            
+            try:
+                res = requests.get(url, params=params)
+                if res.status_code == 200:
+                    st.session_state.api_quota = res.headers.get('x-requests-remaining', "0")
+                    games = res.json()
+                    for game in games:
+                        commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                        if commence_time <= now_utc: continue
+
+                        source_odds, hedge_odds = [], []
+                        for bm in game['bookmakers']:
+                            if bm['key'] in allowed_book_keys:
+                                outcomes = bm['markets'][0]['outcomes']
+                                for o in outcomes:
+                                    entry = {'book': bm['title'], 'team': o['name'], 'price': o['price']}
+                                    if bm['key'] == book_map[p['book']]: source_odds.append(entry)
+                                    else: hedge_odds.append(entry)
+                        
+                        if not source_odds or not hedge_odds: continue
+
+                        for s in source_odds:
+                            opp_team = next(t for t in [game['home_team'], game['away_team']] if t != s['team'])
+                            eligible = [h for h in hedge_odds if h['team'] == opp_team]
+                            if eligible:
+                                best_h = max(eligible, key=lambda x: x['price'])
+                                sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
+                                
+                                if p['strat'] == "Profit Boost (%)":
+                                    bsm = sm * (1 + (p['val']/100))
+                                    h_amt = round((p['wager'] * (1 + bsm)) / (1 + hm))
+                                    profit = min(((p['wager'] * bsm) - h_amt), ((h_amt * hm) - p['wager']))
+                                elif p['strat'] == "Bonus Bet":
+                                    h_amt = round((p['wager'] * sm) / (1 + hm))
+                                    profit = min(((p['wager'] * sm) - h_amt), (h_amt * hm))
+                                else: # No Sweat
+                                    mc = 0.70
+                                    h_amt = round((p['wager'] * (sm + (1 - mc))) / (hm + 1))
+                                    profit = min(((p['wager'] * sm) - h_amt), ((h_amt * hm) + (p['wager'] * mc) - p['wager']))
+
+                                rating = (profit / p['wager']) * 100
+                                if profit > -2.0:
+                                    all_opps.append({
+                                        "game": f"{game['away_team']} vs {game['home_team']}",
+                                        "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
+                                        "profit": profit, "hedge": h_amt, "rating": rating,
+                                        "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
+                                        "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price']
+                                    })
+            except Exception as e: st.error(f"API Error: {e}")
+        status.update(label="Scanning Complete", state="complete")
+    return all_opps
+
+def display_results(all_opps, p):
+    st.write(f"### Results for {p['book']}")
+    st.caption(f"Strategy Applied: **{p['strat']} ({p['val']}%)**")
+    
+    sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
+    if not sorted_opps:
+        st.warning(f"No matches found for {p['book']}.")
+    else:
+        for i, op in enumerate(sorted_opps[:5]):
+            roi_label = f"ROI: {op['rating']:.1f}%" if p['strat'] != "Profit Boost (%)" else f"Profit: ${op['profit']:.2f}"
+            title = f"RANK {i+1} | {op['time']} | {roi_label}"
+            with st.expander(title):
+                st.write(f"**{op['game']}**")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.caption(f"SOURCE: {op['s_book'].upper()}")
+                    st.info(f"Bet **${p['wager']:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
+                    st.caption(f"Includes {p['val']}% {p['strat']}")
+                with c2:
+                    st.caption(f"HEDGE: {op['h_book'].upper()}")
+                    st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
+                with c3:
+                    st.metric("Net Profit", f"${op['profit']:.2f}")
+                    st.caption(f"Strategy: {p['strat']}")
+    st.divider()
 
 # --- HEADER AREA ---
 c_title, c_quota = st.columns([3, 1])
@@ -96,10 +190,22 @@ with st.expander("Promo Type", expanded=True):
         with col3:
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "NHL"])
         
-        if st.form_submit_button("Add to Scan Queue"):
-            st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp})
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            add_to_q = st.form_submit_button("Add to Scan Queue", use_container_width=True)
+        with btn_col2:
+            quick_scan = st.form_submit_button("Just Scan (Instant)", use_container_width=True)
 
-# --- QUEUE & EXECUTION ---
+# --- QUICK SCAN ACTION ---
+if quick_scan:
+    temp_p = {"book": b, "strat": s, "wager": w, "val": v, "sports": sp}
+    results = run_promo_scan(temp_p)
+    display_results(results, temp_p)
+
+# --- QUEUE LOGIC ---
+if add_to_q:
+    st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp})
+
 if st.session_state.promos:
     st.subheader("Scan Queue")
     for i, p in enumerate(st.session_state.promos):
@@ -115,109 +221,13 @@ if st.session_state.promos:
     
     run_col, clear_col = st.columns([4, 1])
     with run_col:
-        execute = st.button("Identify Opportunities", use_container_width=True)
+        execute_all = st.button("Identify Opportunities (Queue)", use_container_width=True)
     with clear_col:
         if st.button("Clear All", use_container_width=True):
             st.session_state.promos = []
             st.rerun()
 
-    if execute:
-        allowed_book_keys = list(book_map.values())
-        now_utc = datetime.now(timezone.utc)
-        
+    if execute_all:
         for p in st.session_state.promos:
-            all_opps = []
-            with st.status(f"Scanning markets for {p['book']}...", expanded=False) as status:
-                for sport_label in p['sports']:
-                    sport_key = sports_map[sport_label]
-                    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
-                    
-                    # FIX: Included 'us2' in regions to catch ESPN Bet/theScore
-                    params = {
-                        'apiKey': API_KEY, 
-                        'regions': 'us,us2', 
-                        'markets': 'h2h', 
-                        'oddsFormat': 'american'
-                    }
-                    
-                    try:
-                        res = requests.get(url, params=params)
-                        if res.status_code == 200:
-                            st.session_state.api_quota = res.headers.get('x-requests-remaining', "0")
-                            games = res.json()
-                            for game in games:
-                                commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                                if commence_time <= now_utc: continue
-
-                                source_odds, hedge_odds = [], []
-                                for bm in game['bookmakers']:
-                                    if bm['key'] in allowed_book_keys:
-                                        outcomes = bm['markets'][0]['outcomes']
-                                        for o in outcomes:
-                                            entry = {'book': bm['title'], 'team': o['name'], 'price': o['price']}
-                                            if bm['key'] == book_map[p['book']]: source_odds.append(entry)
-                                            else: hedge_odds.append(entry)
-                                
-                                if not source_odds or not hedge_odds: continue
-
-                                for s in source_odds:
-                                    opp_team = next(t for t in [game['home_team'], game['away_team']] if t != s['team'])
-                                    eligible = [h for h in hedge_odds if h['team'] == opp_team]
-                                    if eligible:
-                                        best_h = max(eligible, key=lambda x: x['price'])
-                                        sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
-                                        
-                                        # Conversion Logic
-                                        if p['strat'] == "Profit Boost (%)":
-                                            bsm = sm * (1 + (p['val']/100))
-                                            h_amt = round((p['wager'] * (1 + bsm)) / (1 + hm))
-                                            profit = min(((p['wager'] * bsm) - h_amt), ((h_amt * hm) - p['wager']))
-                                        elif p['strat'] == "Bonus Bet":
-                                            h_amt = round((p['wager'] * sm) / (1 + hm))
-                                            profit = min(((p['wager'] * sm) - h_amt), (h_amt * hm))
-                                        else: # No Sweat
-                                            mc = 0.70
-                                            h_amt = round((p['wager'] * (sm + (1 - mc))) / (hm + 1))
-                                            profit = min(((p['wager'] * sm) - h_amt), ((h_amt * hm) + (p['wager'] * mc) - p['wager']))
-
-                                        rating = (profit / p['wager']) * 100
-                                        if profit > -2.0:
-                                            all_opps.append({
-                                                "game": f"{game['away_team']} vs {game['home_team']}",
-                                                "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
-                                                "profit": profit, "hedge": h_amt, "rating": rating,
-                                                "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
-                                                "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price']
-                                            })
-                    except Exception as e: st.error(f"API Error: {e}")
-                status.update(label="Scanning Complete", state="complete")
-
-            st.write(f"### Results for {p['book']}")
-            st.caption(f"Strategy Applied: **{p['strat']} ({p['val']}%)**")
-            
-            sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
-            if not sorted_opps:
-                st.warning(f"No matches found for {p['book']}. (Check if {p['book']} has active odds for the selected sports)")
-            else:
-                for i, op in enumerate(sorted_opps[:5]):
-                    roi_label = f"ROI: {op['rating']:.1f}%" if p['strat'] != "Profit Boost (%)" else f"Profit: ${op['profit']:.2f}"
-                    title = f"RANK {i+1} | {op['time']} | {roi_label}"
-                    with st.expander(title):
-                        st.write(f"**{op['game']}**")
-                        c1, c2, c3 = st.columns(3)
-                        with c1:
-                            st.caption(f"SOURCE: {op['s_book'].upper()}")
-                            st.info(f"Bet **${p['wager']:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
-                            st.caption(f"Includes {p['val']}% {p['strat']}")
-                        with c2:
-                            st.caption(f"HEDGE: {op['h_book'].upper()}")
-                            st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
-                        with c3:
-                            st.metric("Net Profit", f"${op['profit']:.2f}")
-                            st.caption(f"Strategy: {p['strat']}")
-                st.divider()
-
-
-
-
-
+            results = run_promo_scan(p)
+            display_results(results, p)
