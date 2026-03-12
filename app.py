@@ -61,8 +61,8 @@ with st.expander("Step 1: Input your available promos", expanded=True):
             gp_b = st.selectbox("Book", list(book_map.keys())[:-1], key="gpb")
             gp_s = st.selectbox("Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], key="gps")
         with gb:
-            gp_w = st.number_input("Wager amount ($)", value=25.0, key="gpw")
-            gp_v = st.number_input("Boost % (if applicable)", value=50, key="gpv")
+            gp_w = st.number_input("Wager amount ($)", min_value=1.0, value=25.0, key="gpw")
+            gp_v = st.number_input("Boost % (if applicable)", min_value=0, value=50, key="gpv")
         with gc:
             gp_sp = st.multiselect("Sports to search", sport_labels, default=["NBA"], key="gpsp")
         
@@ -85,11 +85,13 @@ with st.expander("Step 1: Input your available promos", expanded=True):
             if not api_key:
                 st.error("Missing API Key in secrets.")
             else:
+                now_utc = datetime.now(timezone.utc)
+                
                 for p in st.session_state.promos:
                     st.write(f"## Best opportunities for: {p['book']} {p['strat']}")
                     
                     found_plays = []
-                    with st.spinner(f"Scanning all {p['sports']} lines for {p['book']}..."):
+                    with st.spinner(f"Scanning upcoming {p['sports']} lines for {p['book']}..."):
                         for sport_label in p['sports']:
                             sport_key = sports_map[sport_label]
                             url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
@@ -99,11 +101,15 @@ with st.expander("Step 1: Input your available promos", expanded=True):
                             if res.status_code == 200:
                                 games = res.json()
                                 for game in games:
+                                    # --- LIVE GAME FILTER ---
+                                    commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                                    if commence_time <= now_utc:
+                                        continue  # Skip games that have already started or are live
+                                    
                                     s_odds, h_odds = [], []
                                     for bm in game['bookmakers']:
                                         for m in bm['markets']:
                                             for o in m['outcomes']:
-                                                # Look at all odds, no filtering
                                                 if bm['key'] == book_map[p['book']]:
                                                     s_odds.append(o)
                                                 h_odds.append({'price': o['price'], 'team': o['name'], 'book': bm['title']})
@@ -112,7 +118,6 @@ with st.expander("Step 1: Input your available promos", expanded=True):
                                         opp_team = next((t for t in [game['home_team'], game['away_team']] if t != so['name']), None)
                                         eligible_h = [ho for ho in h_odds if ho['team'] == opp_team]
                                         if eligible_h:
-                                            # Pick the best hedge available globally
                                             best_h = max(eligible_h, key=lambda x: x['price'])
                                             
                                             sm, hm = get_multiplier(so['price']), get_multiplier(best_h['price'])
@@ -122,43 +127,42 @@ with st.expander("Step 1: Input your available promos", expanded=True):
                                                 hamt = (p['wager'] * (1 + boosted_sm)) / (1 + hm)
                                                 profit = (p['wager'] * boosted_sm) - hamt
                                             elif p['strat'] == "Bonus Bet":
-                                                # Stake not returned logic
                                                 hamt = (p['wager'] * sm) / (1 + hm)
                                                 profit = (p['wager'] * sm) - hamt
-                                            else: # No-Sweat (Refund evaluated at ~70%)
+                                            else: # No-Sweat
                                                 hamt = (p['wager'] * (sm + 0.30)) / (hm + 1)
                                                 profit = (p['wager'] * sm) - hamt
 
                                             found_plays.append({
                                                 "game": f"{game['away_team']} vs {game['home_team']}",
+                                                "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M%p"),
                                                 "profit": profit, "hamt": hamt, "s_team": so['name'],
                                                 "s_price": so['price'], "h_team": best_h['team'],
                                                 "h_book": best_h['book'], "h_price": best_h['price'],
                                                 "sport": sport_label
                                             })
 
-                    # Rank everything by raw profit and show the top 5
                     top_plays = sorted(found_plays, key=lambda x: x['profit'], reverse=True)[:5]
                     
                     if top_plays:
                         for play in top_plays:
                             with st.container():
-                                st.markdown(f"**{play['game']}** ({play['sport']})")
+                                st.markdown(f"**{play['game']}** ({play['sport']} - {play['time']})")
                                 c1, c2, c3 = st.columns(3)
                                 c1.info(f"Bet ${p['wager']} on {play['s_team']} @ {play['s_price']:+}")
                                 c2.success(f"Hedge ${play['hamt']:.2f} on {play['h_book']} @ {play['h_price']:+}")
                                 c3.metric("Max profit", f"${play['profit']:.2f}")
                     else:
-                        st.info("No matchups found for this promo.")
+                        st.info("No upcoming matchups found for this promo.")
 
-# --- MANUAL CALCULATOR ---
+# --- QUICK CALCULATOR ---
 st.write("---")
 st.subheader("Quick hedge calculator")
 with st.expander("Manual check"):
     m_col1, m_col2 = st.columns(2)
     m_odds = m_col1.number_input("Promo odds", value=150)
     m_hedge = m_col2.number_input("Best hedge odds", value=-140)
-    m_w = st.number_input("Promo wager amount", value=50.0)
+    m_w = st.number_input("Promo wager amount", min_value=1.0, value=50.0)
     if st.button("Calculate results"):
         sm, hm = get_multiplier(m_odds), get_multiplier(m_hedge)
         h_amt = (m_w * (1 + sm)) / (1 + hm)
