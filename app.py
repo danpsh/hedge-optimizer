@@ -21,7 +21,7 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
 
-    /* NORMAL BUTTONS (Identify Opps / Clear All) */
+    /* NORMAL BUTTONS */
     .stButton>button {
         background-color: #1e293b !important;
         color: #ffffff !important;
@@ -47,14 +47,6 @@ st.markdown("""
         font-family: 'Roboto Mono', monospace;
         font-weight: 800;
     }
-
-    code {
-        color: #475569 !important;
-        background-color: #f1f5f9 !important;
-        padding: 2px 6px !important;
-        border-radius: 4px !important;
-        font-family: 'Roboto Mono', monospace !important;
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -64,10 +56,11 @@ API_KEY = st.secrets.get("ODDS_API_KEY", "")
 def get_multiplier(american_odds):
     return (american_odds / 100) if american_odds > 0 else (100 / abs(american_odds))
 
+# Updated mapping to ensure compatibility with API keys
 book_map = {
     "DraftKings": "draftkings", 
     "FanDuel": "fanduel",
-    "theScore / ESPN": "espnbet", 
+    "theScore / ESPN": "espnbet", # Official API key for both is 'espnbet'
     "BetMGM": "betmgm"
 }
 
@@ -129,7 +122,7 @@ if st.session_state.promos:
             st.rerun()
 
     if execute:
-        allowed_hedge_keys = list(book_map.values())
+        allowed_book_keys = list(book_map.values())
         now_utc = datetime.now(timezone.utc)
         
         for p in st.session_state.promos:
@@ -138,7 +131,14 @@ if st.session_state.promos:
                 for sport_label in p['sports']:
                     sport_key = sports_map[sport_label]
                     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
-                    params = {'apiKey': API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
+                    
+                    # FIX: Included 'us2' in regions to catch ESPN Bet/theScore
+                    params = {
+                        'apiKey': API_KEY, 
+                        'regions': 'us,us2', 
+                        'markets': 'h2h', 
+                        'oddsFormat': 'american'
+                    }
                     
                     try:
                         res = requests.get(url, params=params)
@@ -151,7 +151,7 @@ if st.session_state.promos:
 
                                 source_odds, hedge_odds = [], []
                                 for bm in game['bookmakers']:
-                                    if bm['key'] in allowed_hedge_keys:
+                                    if bm['key'] in allowed_book_keys:
                                         outcomes = bm['markets'][0]['outcomes']
                                         for o in outcomes:
                                             entry = {'book': bm['title'], 'team': o['name'], 'price': o['price']}
@@ -167,21 +167,20 @@ if st.session_state.promos:
                                         best_h = max(eligible, key=lambda x: x['price'])
                                         sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
                                         
+                                        # Conversion Logic
                                         if p['strat'] == "Profit Boost (%)":
                                             bsm = sm * (1 + (p['val']/100))
                                             h_amt = round((p['wager'] * (1 + bsm)) / (1 + hm))
                                             profit = min(((p['wager'] * bsm) - h_amt), ((h_amt * hm) - p['wager']))
-                                            rating = (profit / p['wager']) * 100
                                         elif p['strat'] == "Bonus Bet":
                                             h_amt = round((p['wager'] * sm) / (1 + hm))
                                             profit = min(((p['wager'] * sm) - h_amt), (h_amt * hm))
-                                            rating = (profit / p['wager']) * 100
                                         else: # No Sweat
                                             mc = 0.70
                                             h_amt = round((p['wager'] * (sm + (1 - mc))) / (hm + 1))
                                             profit = min(((p['wager'] * sm) - h_amt), ((h_amt * hm) + (p['wager'] * mc) - p['wager']))
-                                            rating = (profit / p['wager']) * 100
 
+                                        rating = (profit / p['wager']) * 100
                                         if profit > -2.0:
                                             all_opps.append({
                                                 "game": f"{game['away_team']} vs {game['home_team']}",
@@ -193,26 +192,23 @@ if st.session_state.promos:
                     except Exception as e: st.error(f"API Error: {e}")
                 status.update(label="Scanning Complete", state="complete")
 
-            # --- UPDATED RESULTS SECTION ---
             st.write(f"### Results for {p['book']}")
-            st.caption(f"Strategy Applied: **{p['strat']} ({p['val']}%)**") # Added clarification line
+            st.caption(f"Strategy Applied: **{p['strat']} ({p['val']}%)**")
             
             sorted_opps = sorted(all_opps, key=lambda x: x['rating'], reverse=True)
             if not sorted_opps:
-                st.warning("No matches found within the selected books.")
+                st.warning(f"No matches found for {p['book']}. (Check if {p['book']} has active odds for the selected sports)")
             else:
                 for i, op in enumerate(sorted_opps[:5]):
-                    # Dynamic label for the header
                     roi_label = f"ROI: {op['rating']:.1f}%" if p['strat'] != "Profit Boost (%)" else f"Profit: ${op['profit']:.2f}"
                     title = f"RANK {i+1} | {op['time']} | {roi_label}"
-                    
                     with st.expander(title):
                         st.write(f"**{op['game']}**")
                         c1, c2, c3 = st.columns(3)
                         with c1:
                             st.caption(f"SOURCE: {op['s_book'].upper()}")
                             st.info(f"Bet **${p['wager']:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
-                            st.caption(f"Includes {p['val']}% {p['strat']}") # Added to inside the card
+                            st.caption(f"Includes {p['val']}% {p['strat']}")
                         with c2:
                             st.caption(f"HEDGE: {op['h_book'].upper()}")
                             st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
@@ -220,29 +216,3 @@ if st.session_state.promos:
                             st.metric("Net Profit", f"${op['profit']:.2f}")
                             st.caption(f"Strategy: {p['strat']}")
                 st.divider()
-
-# --- MANUAL CALCULATOR ---
-st.write("### Manual Calculation")
-with st.expander("Open Calculator"):
-    m_strat = st.radio("Conversion Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1:
-        ms_p = st.number_input("Source Odds", value=200, key="ms")
-        mw_a = st.number_input("Wager $", value=50.0, key="mw")
-    with col_m2:
-        mh_p = st.number_input("Hedge Odds", value=-150, key="mh")
-        mv_v = st.number_input("Boost/Refund %", value=50, key="mv")
-    with col_m3:
-        sm_calc, hm_calc = get_multiplier(ms_p), get_multiplier(mh_p)
-        if m_strat == "Profit Boost (%)":
-            bsm_c = sm_calc * (1 + (mv_v/100))
-            ha = (mw_a * (1 + bsm_c)) / (1 + hm_calc)
-            pr = (mw_a * bsm_c) - ha
-        elif m_strat == "Bonus Bet":
-            ha = (mw_a * sm_calc) / (1 + hm_calc)
-            pr = (mw_a * sm_calc) - ha
-        else:
-            ha = (mw_a * (sm_calc + (mv_v/100 * 0.7))) / (hm_calc + 1)
-            pr = (mw_a * sm_calc) - ha
-        st.metric("Hedge Amount", f"${ha:.2f}")
-        st.metric("Expected Profit", f"${pr:.2f}")
