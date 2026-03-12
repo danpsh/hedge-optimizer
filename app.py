@@ -130,6 +130,7 @@ def run_promo_scan(p):
                                 if profit > -2.0:
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
+                                        "sport": sport_label,
                                         "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
                                         "profit": profit, "hedge": h_amt, "rating": rating,
                                         "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
@@ -141,15 +142,15 @@ def run_promo_scan(p):
 
 def display_results(all_opps, p):
     st.write(f"### Results for {p['book']}")
-    st.caption(f"Applied: **{p['strat']} ({p['val']}%)**")
+    st.caption(f"Applied: **{p['strat']} ({p['val']}%)** | Sports: {', '.join(p['sports'])}")
     
     sorted_opps = sorted(all_opps, key=lambda x: x['profit'], reverse=True)
     if not sorted_opps:
         st.warning(f"No matches found for {p['book']}.")
     else:
         for i, op in enumerate(sorted_opps[:5]):
-            # UPDATED: Replaced ROI with Profit $ in the title
-            title = f"RANK {i+1} | {op['time']} | Profit: ${op['profit']:.2f}"
+            # Title includes the Sport and Profit
+            title = f"RANK {i+1} | {op['sport']} | {op['time']} | Profit: ${op['profit']:.2f}"
             with st.expander(title):
                 st.write(f"**{op['game']}**")
                 c1, c2, c3 = st.columns(3)
@@ -192,7 +193,7 @@ with st.expander("Promo Type", expanded=True):
         with btn_col1:
             add_to_q = st.form_submit_button("Add to Scan Queue", use_container_width=True)
         with btn_col2:
-            quick_scan = st.form_submit_button("Quick Scan (Instant)", use_container_width=True)
+            quick_scan = st.form_submit_button("Just Scan (Instant)", use_container_width=True)
 
 # --- QUICK SCAN ACTION ---
 if quick_scan:
@@ -215,7 +216,9 @@ if st.session_state.promos:
     for i, p in enumerate(st.session_state.promos):
         q_col1, q_col2 = st.columns([9.2, 0.8])
         with q_col1:
-            st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Profit Boost: **{p['val']}%**")
+            # Updated to show selected sports in the queue info block
+            sports_list = ", ".join(p['sports'])
+            st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Boost: **{p['val']}%** | Sports: **{sports_list}**")
         with q_col2:
             st.markdown('<div class="remove-btn">', unsafe_allow_html=True)
             if st.button("✕", key=f"rm_{i}"):
@@ -235,4 +238,3 @@ if st.session_state.promos:
         for p in st.session_state.promos:
             results = run_promo_scan(p)
             display_results(results, p)
-
