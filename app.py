@@ -10,17 +10,16 @@ st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono&display=swap');
     
-    /* Main Background */
     .stApp {
         background-color: #f8fafc;
         color: #1e293b;
         font-family: 'Inter', sans-serif;
     }
 
-    /* Headers */
     h1, h2, h3 {
         color: #0f172a !important;
         font-weight: 700 !important;
+        margin-bottom: 0.5rem !important;
     }
 
     /* Professional Cards */
@@ -28,7 +27,6 @@ st.markdown("""
         background-color: #ffffff !important;
         border: 1px solid #e2e8f0 !important;
         border-radius: 8px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
     }
 
     /* Metrics */
@@ -39,19 +37,16 @@ st.markdown("""
         font-size: 1.6rem !important;
     }
     
-    /* Buttons - Professional Navy */
+    /* Buttons */
     .stButton>button {
         background-color: #1e293b;
         color: #ffffff;
         border: none;
         border-radius: 6px;
         font-weight: 600;
-        padding: 0.5rem 1rem;
-        transition: all 0.2s;
     }
     .stButton>button:hover {
         background-color: #334155;
-        border-color: #334155;
         color: #ffffff;
     }
 
@@ -77,16 +72,18 @@ book_map = {
     "theScore / ESPN": "espnbet", "BetMGM": "betmgm", "Caesars": "caesars"
 }
 
+# Updated to include NHL
 sports_map = {
-    "NBA": "basketball_nba", "NCAAB": "basketball_ncaab", 
-    "NHL": "icehockey_nhl", "MLB": "baseball_mlb", "MMA": "mma_mixed_martial_arts"
+    "NBA": "basketball_nba",
+    "NCAA Men's": "basketball_ncaab",
+    "NCAA Women's": "basketball_ncaaw",
+    "NHL": "icehockey_nhl"
 }
 
 # --- HEADER AREA ---
 c_title, c_quota = st.columns([3, 1])
 with c_title:
     st.title("Promo Converter")
-    st.caption(f"Terminal Status: Online | UTC: {datetime.now(timezone.utc).strftime('%H:%M')}")
 with c_quota:
     if 'api_quota' not in st.session_state:
         st.session_state.api_quota = "—"
@@ -94,11 +91,11 @@ with c_quota:
 
 st.divider()
 
-# --- INPUT AREA ---
+# --- INPUT AREA (ALWAYS OPEN) ---
 if 'promos' not in st.session_state: st.session_state.promos = []
 
-with st.expander("Step 1: Define Available Promos", expanded=not st.session_state.promos):
-    with st.form("promo_form"):
+with st.expander("Step 1: Define Available Promos", expanded=True):
+    with st.form("promo_form", clear_on_submit=True):
         col1, col2, col3 = st.columns([2, 2, 1])
         with col1:
             b = st.selectbox("Source Book", list(book_map.keys()))
@@ -107,7 +104,7 @@ with st.expander("Step 1: Define Available Promos", expanded=not st.session_stat
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=25.0)
             v = st.number_input("Promo Value (Boost/Refund %)", min_value=1, value=50)
         with col3:
-            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA"])
+            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "NHL"])
         
         if st.form_submit_button("Add to Scan Queue"):
             st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp})
@@ -116,7 +113,7 @@ with st.expander("Step 1: Define Available Promos", expanded=not st.session_stat
 if st.session_state.promos:
     st.subheader("Scan Queue")
     for i, p in enumerate(st.session_state.promos):
-        st.info(f"**{p['book']}** | {p['strat']} (${p['wager']})")
+        st.info(f"**{p['book']}** | {p['strat']} (${p['wager']:.2f})")
     
     run_col, clear_col = st.columns([4, 1])
     with run_col:
@@ -164,7 +161,6 @@ if st.session_state.promos:
                                         best_h = max(eligible_hedges, key=lambda x: x['price'])
                                         sm, hm = get_multiplier(so['price']), get_multiplier(best_h['price'])
                                         
-                                        # Conversion Logic
                                         if p['strat'] == "Profit Boost (%)":
                                             bsm = sm * (1 + (p['val']/100))
                                             h_amt = (p['wager'] * (1 + bsm)) / (1 + hm)
@@ -186,7 +182,6 @@ if st.session_state.promos:
                         st.error(f"Error connecting to API: {e}")
                 status.update(label="Scanning Complete", state="complete")
 
-            # Sorting and displaying results
             top_plays = sorted(found_plays, key=lambda x: x['profit'], reverse=True)[:5]
             if top_plays:
                 for play in top_plays:
@@ -204,9 +199,10 @@ if st.session_state.promos:
                             st.metric("Net Profit", f"${play['profit']:.2f}")
                         st.divider()
             else:
-                st.warning("No profitable conversions found for current settings.")
+                st.warning("No matches found.")
 
 # --- MANUAL CALCULATOR ---
+st.write("---")
 st.write("### Manual Calculation")
 with st.expander("Open Calculator"):
     m_strat = st.radio("Conversion Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], horizontal=True)
@@ -218,7 +214,6 @@ with st.expander("Open Calculator"):
         mh_p = st.number_input("Hedge Odds", value=-150, key="mh")
         mv_v = st.number_input("Boost/Refund %", value=50, key="mv")
     with col_m3:
-        # Inline Math
         sm_calc, hm_calc = get_multiplier(ms_p), get_multiplier(mh_p)
         if m_strat == "Profit Boost (%)":
             bsm_c = sm_calc * (1 + (mv_v/100))
