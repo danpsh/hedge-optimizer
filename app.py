@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Arb Terminal", layout="wide")
 
-# --- LIGHT TECH THEME (REVERTED) ---
+# --- LIGHT TECH THEME ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fb; color: #1e1e1e; }
@@ -47,6 +47,13 @@ sport_labels = list(sports_map.keys())
 
 # --- HEADER AREA ---
 st.title("Promo Converter")
+
+# --- API TRACKER ---
+quota_col1, quota_col2 = st.columns([1, 4])
+quota_placeholder = quota_col1.empty()
+if 'api_quota' not in st.session_state:
+    st.session_state.api_quota = "Not Scanned"
+quota_placeholder.metric("API Quota Left", st.session_state.api_quota)
 
 # --- GAMEPLAN ARCHITECT ---
 st.subheader("Gameplan architect")
@@ -101,10 +108,15 @@ with st.expander("Step 1: Input your available promos", expanded=True):
                             params = {'apiKey': api_key, 'regions': 'us', 'markets': 'h2h', 'bookmakers': book_csv, 'oddsFormat': 'american'}
                             
                             res = requests.get(url, params=params)
+                            
+                            # Update API Quota from headers
+                            if 'x-requests-remaining' in res.headers:
+                                st.session_state.api_quota = res.headers['x-requests-remaining']
+                                quota_placeholder.metric("API Quota Left", st.session_state.api_quota)
+
                             if res.status_code == 200:
                                 games = res.json()
                                 for game in games:
-                                    # Filter Live Games
                                     commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                                     if commence_time <= now_utc: continue 
                                     
