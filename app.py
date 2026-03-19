@@ -53,6 +53,10 @@ st.markdown("""
 # --- UTILS ---
 API_KEY = st.secrets.get("ODDS_API_KEY", "")
 
+def round_to_quarter(value):
+    """Rounds a float to the nearest 0.25 for natural-looking bets"""
+    return round(value * 4) / 4
+
 def get_multiplier(american_odds):
     return (american_odds / 100) if american_odds > 0 else (100 / abs(american_odds))
 
@@ -116,18 +120,19 @@ def run_promo_scan(p):
                                 
                                 if p['strat'] == "Profit Boost (%)":
                                     bsm = sm * (1 + (p['val']/100))
-                                    h_amt = round((p['wager'] * (1 + bsm)) / (1 + hm))
+                                    h_amt = round_to_quarter((p['wager'] * (1 + bsm)) / (1 + hm))
                                     profit = min(((p['wager'] * bsm) - h_amt), ((h_amt * hm) - p['wager']))
                                 elif p['strat'] == "Bonus Bet":
-                                    h_amt = round((p['wager'] * sm) / (1 + hm))
+                                    h_amt = round_to_quarter((p['wager'] * sm) / (1 + hm))
                                     profit = min(((p['wager'] * sm) - h_amt), (h_amt * hm))
-                                else: # No Sweat
-                                    mc = 0.70
-                                    h_amt = round((p['wager'] * (sm + (1 - mc))) / (hm + 1))
+                                else: # No-Sweat Bet
+                                    # SET TO 65% CONVERSION RATE
+                                    mc = 0.65
+                                    h_amt = round_to_quarter((p['wager'] * (sm + (1 - mc))) / (hm + 1))
                                     profit = min(((p['wager'] * sm) - h_amt), ((h_amt * hm) + (p['wager'] * mc) - p['wager']))
 
                                 rating = (profit / p['wager']) * 100
-                                if profit > -2.0:
+                                if profit > -5.0: # Showing slightly wider range of results
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
                                         "sport": sport_label,
@@ -149,17 +154,16 @@ def display_results(all_opps, p):
         st.warning(f"No matches found for {p['book']}.")
     else:
         for i, op in enumerate(sorted_opps[:5]):
-            # Title includes the Sport and Profit
             title = f"RANK {i+1} | {op['sport']} | {op['time']} | Profit: ${op['profit']:.2f}"
             with st.expander(title):
                 st.write(f"**{op['game']}**")
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     st.caption(f"SOURCE: {op['s_book'].upper()}")
-                    st.info(f"Bet **${p['wager']:.0f}** on {op['s_team']} @ **{op['s_price']:+}**")
+                    st.info(f"Bet **${p['wager']:.2f}** on {op['s_team']} @ **{op['s_price']:+}**")
                 with c2:
                     st.caption(f"HEDGE: {op['h_book'].upper()}")
-                    st.success(f"Bet **${op['hedge']:.0f}** on {op['h_team']} @ **{op['h_price']:+}**")
+                    st.success(f"Bet **${op['hedge']:.2f}** on {op['h_team']} @ **{op['h_price']:+}**")
                 with c3:
                     st.metric("Net Profit", f"${op['profit']:.2f}")
     st.divider()
@@ -178,16 +182,18 @@ st.divider()
 if 'promos' not in st.session_state: st.session_state.promos = []
 
 with st.expander("Promo Type", expanded=True):
-    with st.form("promo_form", clear_on_submit=True):
+    # clear_on_submit=False keeps the dropdowns from resetting
+    with st.form("promo_form", clear_on_submit=False):
         col1, col2, col3 = st.columns([2, 2, 1])
         with col1:
             b = st.selectbox("Source Book", list(book_map.keys()))
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
-            w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0)
-            v = st.number_input("Profit Boost (%)", min_value=1, value=50)
+            w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0, step=0.25)
+            v = st.number_input("Profit Boost (%) / Bonus Value", min_value=1, value=50)
         with col3:
-            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[])
+            # Default to NBA for faster testing
+            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA"])
         
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
@@ -216,9 +222,8 @@ if st.session_state.promos:
     for i, p in enumerate(st.session_state.promos):
         q_col1, q_col2 = st.columns([9.2, 0.8])
         with q_col1:
-            # Updated to show selected sports in the queue info block
             sports_list = ", ".join(p['sports'])
-            st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Boost: **{p['val']}%** | Sports: **{sports_list}**")
+            st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Boost/Val: **{p['val']}%** | Sports: **{sports_list}**")
         with q_col2:
             st.markdown('<div class="remove-btn">', unsafe_allow_html=True)
             if st.button("✕", key=f"rm_{i}"):
@@ -238,4 +243,3 @@ if st.session_state.promos:
         for p in st.session_state.promos:
             results = run_promo_scan(p)
             display_results(results, p)
-
