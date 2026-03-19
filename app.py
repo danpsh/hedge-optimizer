@@ -13,7 +13,6 @@ st.markdown("""
     .stApp { background-color: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; }
     h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; }
 
-    /* Cards & Expanders */
     div[data-testid="stExpander"] {
         background-color: #ffffff !important;
         border: 1px solid #e2e8f0 !important;
@@ -21,7 +20,6 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
 
-    /* Buttons */
     .stButton>button {
         background-color: #1e293b !important;
         color: #ffffff !important;
@@ -29,7 +27,6 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* Individual Remove Button (✕) */
     .remove-btn button {
         background-color: #fef2f2 !important;
         color: #ef4444 !important;
@@ -41,7 +38,7 @@ st.markdown("""
 
     [data-testid="stMetricValue"] {
         font-family: 'Roboto Mono', monospace;
-        font-size: 1.6rem !important;
+        font-size: 1.4rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -105,38 +102,40 @@ def run_promo_scan(p):
                                 best_h = max(eligible, key=lambda x: x['price'])
                                 sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
                                 
-                                # Raw Hedge Calculation
                                 if p['strat'] == "Profit Boost (%)":
                                     bsm = sm * (1 + (p['val']/100))
                                     raw_h = (p['wager'] * (1 + bsm)) / (1 + hm)
                                 elif p['strat'] == "Bonus Bet":
                                     raw_h = (p['wager'] * sm) / (1 + hm)
-                                else: # No-Sweat Bet (65% Conversion)
+                                else: # No-Sweat Bet
                                     mc = 0.65
                                     raw_h = (p['wager'] * (sm + (1 - mc))) / (hm + 1)
 
-                                # Pre-calculate both rounding versions
                                 h_25 = round(raw_h * 4) / 4
                                 h_100 = float(round(raw_h))
 
-                                # Calculate profit based on the 0.25 rounding (primary metric)
+                                # Calculate Profit for $0.25 (Main)
                                 if p['strat'] == "Profit Boost (%)":
-                                    profit = min(((p['wager'] * bsm) - h_25), ((h_25 * hm) - p['wager']))
+                                    bsm = sm * (1 + (p['val']/100))
+                                    p_25 = min(((p['wager'] * bsm) - h_25), ((h_25 * hm) - p['wager']))
+                                    p_100 = min(((p['wager'] * bsm) - h_100), ((h_100 * hm) - p['wager']))
                                 elif p['strat'] == "Bonus Bet":
-                                    profit = min(((p['wager'] * sm) - h_25), (h_25 * hm))
-                                else:
-                                    profit = min(((p['wager'] * sm) - h_25), ((h_25 * hm) + (p['wager'] * 0.65) - p['wager']))
+                                    p_25 = min(((p['wager'] * sm) - h_25), (h_25 * hm))
+                                    p_100 = min(((p['wager'] * sm) - h_100), (h_100 * hm))
+                                else: # No-Sweat
+                                    p_25 = min(((p['wager'] * sm) - h_25), ((h_25 * hm) + (p['wager'] * 0.65) - p['wager']))
+                                    p_100 = min(((p['wager'] * sm) - h_100), ((h_100 * hm) + (p['wager'] * 0.65) - p['wager']))
 
-                                if profit > -5.0:
+                                if p_25 > -5.0:
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
                                         "sport": sport_label,
                                         "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
-                                        "profit": profit, 
+                                        "p_25": p_25, "p_100": p_100,
                                         "h_25": h_25, "h_100": h_100,
                                         "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
                                         "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price'],
-                                        "strat": p['strat'], "wager": p['wager'], "sm": sm, "hm": hm, "val": p['val']
+                                        "wager": p['wager']
                                     })
             except Exception as e: st.error(f"API Error: {e}")
         status.update(label="Scanning Complete", state="complete")
@@ -144,41 +143,31 @@ def run_promo_scan(p):
 
 def display_results(all_opps, p):
     st.write(f"### Results for {p['book']}")
-    sorted_opps = sorted(all_opps, key=lambda x: x['profit'], reverse=True)
+    sorted_opps = sorted(all_opps, key=lambda x: x['p_25'], reverse=True)
     
     if not sorted_opps:
         st.warning(f"No matches found.")
     else:
         for i, op in enumerate(sorted_opps[:10]):
-            # Helper to recalc profit for the $1.00 option on the fly
-            if op['strat'] == "Profit Boost (%)":
-                bsm = op['sm'] * (1 + (op['val']/100))
-                p_100 = min(((op['wager'] * bsm) - op['h_100']), ((op['h_100'] * op['hm']) - op['wager']))
-            elif op['strat'] == "Bonus Bet":
-                p_100 = min(((op['wager'] * op['sm']) - op['h_100']), (op['h_100'] * op['hm']))
-            else:
-                p_100 = min(((op['wager'] * op['sm']) - op['h_100']), ((op['h_100'] * op['hm']) + (op['wager'] * 0.65) - op['wager']))
-
-            title = f"RANK {i+1} | {op['sport']} | {op['game']} | Max Profit: ${max(op['profit'], p_100):.2f}"
+            title = f"RANK {i+1} | {op['sport']} | Profit: ${op['p_25']:.2f}"
             
             with st.expander(title):
-                st.write(f"**Market:** {op['game']} ({op['time']})")
+                st.write(f"**{op['game']}** | {op['time']}")
+                c_main, c_h25, c_h100 = st.columns([1.2, 1, 1])
                 
-                col_main, col_hedge1, col_hedge2 = st.columns([1.2, 1, 1])
-                
-                with col_main:
+                with c_main:
                     st.caption(f"SOURCE: {op['s_book'].upper()}")
                     st.info(f"Bet **${op['wager']:.2f}** on **{op['s_team']}** @ **{op['s_price']:+}**")
                 
-                with col_hedge1:
-                    st.caption(f"HEDGE (Nearest $0.25)")
+                with c_h25:
+                    st.caption(f"HEDGE (0.25)")
                     st.success(f"Bet **${op['h_25']:.2f}** on **{op['h_team']}** @ **{op['h_price']:+}**")
-                    st.metric("Profit", f"${op['profit']:.2f}")
+                    st.metric("Profit", f"${op['p_25']:.2f}")
 
-                with col_hedge2:
-                    st.caption(f"HEDGE (Nearest $1.00)")
+                with c_h100:
+                    st.caption(f"HEDGE (1.00)")
                     st.success(f"Bet **${op['h_100']:.0f}.00** on **{op['h_team']}** @ **{op['h_price']:+}**")
-                    st.metric("Profit", f"${p_100:.2f}")
+                    st.metric("Profit", f"${op['p_100']:.2f}")
     st.divider()
 
 # --- HEADER AREA ---
