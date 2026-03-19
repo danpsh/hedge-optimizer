@@ -114,7 +114,7 @@ def run_promo_scan(p):
                                 h_25 = round(raw_h * 4) / 4
                                 h_100 = float(round(raw_h))
 
-                                # Calculate Profit for $0.25 (Main)
+                                # Calculate Profit for $0.25 (Main) and $1.00 (Comparison)
                                 if p['strat'] == "Profit Boost (%)":
                                     bsm = sm * (1 + (p['val']/100))
                                     p_25 = min(((p['wager'] * bsm) - h_25), ((h_25 * hm) - p['wager']))
@@ -149,10 +149,10 @@ def display_results(all_opps, p):
         st.warning(f"No matches found.")
     else:
         for i, op in enumerate(sorted_opps[:10]):
-            title = f"RANK {i+1} | {op['sport']} | Profit: ${op['p_25']:.2f}"
+            title = f"RANK {i+1} | {op['game']} | {op['time']} | Profit: ${op['p_25']:.2f}"
             
             with st.expander(title):
-                st.write(f"**{op['game']}** | {op['time']}")
+                st.write(f"**{op['sport']}** | {op['game']} | {op['time']}")
                 c_main, c_h25, c_h100 = st.columns([1.2, 1, 1])
                 
                 with c_main:
