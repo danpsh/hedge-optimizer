@@ -3,7 +3,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Promo Converter", layout="wide")
+st.set_page_config(page_title="Promo Converter Pro", layout="wide")
 
 # --- PROFESSIONAL THEME ---
 st.markdown("""
@@ -21,17 +21,15 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
 
-    /* NORMAL BUTTONS */
+    /* Buttons */
     .stButton>button {
         background-color: #1e293b !important;
         color: #ffffff !important;
-        border: none !important;
         border-radius: 6px !important;
         font-weight: 600 !important;
     }
-    .stButton>button:hover { background-color: #334155 !important; }
 
-    /* INDIVIDUAL REMOVE BUTTON (✕) */
+    /* Individual Remove Button (✕) */
     .remove-btn button {
         background-color: #fef2f2 !important;
         color: #ef4444 !important;
@@ -41,21 +39,15 @@ st.markdown("""
         padding: 2px 8px !important;
     }
 
-    /* Green Metrics */
     [data-testid="stMetricValue"] {
-        color: #059669 !important;
         font-family: 'Roboto Mono', monospace;
-        font-weight: 800;
+        font-size: 1.6rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- UTILS ---
 API_KEY = st.secrets.get("ODDS_API_KEY", "")
-
-def round_to_quarter(value):
-    """Rounds a float to the nearest 0.25 for natural-looking bets"""
-    return round(value * 4) / 4
 
 def get_multiplier(american_odds):
     return (american_odds / 100) if american_odds > 0 else (100 / abs(american_odds))
@@ -80,16 +72,11 @@ def run_promo_scan(p):
     now_utc = datetime.now(timezone.utc)
     all_opps = []
     
-    with st.status(f"Scanning markets for {p['book']}...", expanded=False) as status:
+    with st.status(f"Scanning {p['book']}...", expanded=False) as status:
         for sport_label in p['sports']:
             sport_key = sports_map[sport_label]
             url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
-            params = {
-                'apiKey': API_KEY, 
-                'regions': 'us,us2', 
-                'markets': 'h2h', 
-                'oddsFormat': 'american'
-            }
+            params = {'apiKey': API_KEY, 'regions': 'us,us2', 'markets': 'h2h', 'oddsFormat': 'american'}
             
             try:
                 res = requests.get(url, params=params)
@@ -118,28 +105,38 @@ def run_promo_scan(p):
                                 best_h = max(eligible, key=lambda x: x['price'])
                                 sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
                                 
+                                # Raw Hedge Calculation
                                 if p['strat'] == "Profit Boost (%)":
                                     bsm = sm * (1 + (p['val']/100))
-                                    h_amt = round_to_quarter((p['wager'] * (1 + bsm)) / (1 + hm))
-                                    profit = min(((p['wager'] * bsm) - h_amt), ((h_amt * hm) - p['wager']))
+                                    raw_h = (p['wager'] * (1 + bsm)) / (1 + hm)
                                 elif p['strat'] == "Bonus Bet":
-                                    h_amt = round_to_quarter((p['wager'] * sm) / (1 + hm))
-                                    profit = min(((p['wager'] * sm) - h_amt), (h_amt * hm))
-                                else: # No-Sweat Bet
-                                    # SET TO 65% CONVERSION RATE
+                                    raw_h = (p['wager'] * sm) / (1 + hm)
+                                else: # No-Sweat Bet (65% Conversion)
                                     mc = 0.65
-                                    h_amt = round_to_quarter((p['wager'] * (sm + (1 - mc))) / (hm + 1))
-                                    profit = min(((p['wager'] * sm) - h_amt), ((h_amt * hm) + (p['wager'] * mc) - p['wager']))
+                                    raw_h = (p['wager'] * (sm + (1 - mc))) / (hm + 1)
 
-                                rating = (profit / p['wager']) * 100
-                                if profit > -5.0: # Showing slightly wider range of results
+                                # Pre-calculate both rounding versions
+                                h_25 = round(raw_h * 4) / 4
+                                h_100 = float(round(raw_h))
+
+                                # Calculate profit based on the 0.25 rounding (primary metric)
+                                if p['strat'] == "Profit Boost (%)":
+                                    profit = min(((p['wager'] * bsm) - h_25), ((h_25 * hm) - p['wager']))
+                                elif p['strat'] == "Bonus Bet":
+                                    profit = min(((p['wager'] * sm) - h_25), (h_25 * hm))
+                                else:
+                                    profit = min(((p['wager'] * sm) - h_25), ((h_25 * hm) + (p['wager'] * 0.65) - p['wager']))
+
+                                if profit > -5.0:
                                     all_opps.append({
                                         "game": f"{game['away_team']} vs {game['home_team']}",
                                         "sport": sport_label,
                                         "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
-                                        "profit": profit, "hedge": h_amt, "rating": rating,
+                                        "profit": profit, 
+                                        "h_25": h_25, "h_100": h_100,
                                         "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
-                                        "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price']
+                                        "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price'],
+                                        "strat": p['strat'], "wager": p['wager'], "sm": sm, "hm": hm, "val": p['val']
                                     })
             except Exception as e: st.error(f"API Error: {e}")
         status.update(label="Scanning Complete", state="complete")
@@ -147,25 +144,41 @@ def run_promo_scan(p):
 
 def display_results(all_opps, p):
     st.write(f"### Results for {p['book']}")
-    st.caption(f"Applied: **{p['strat']} ({p['val']}%)** | Sports: {', '.join(p['sports'])}")
-    
     sorted_opps = sorted(all_opps, key=lambda x: x['profit'], reverse=True)
+    
     if not sorted_opps:
-        st.warning(f"No matches found for {p['book']}.")
+        st.warning(f"No matches found.")
     else:
-        for i, op in enumerate(sorted_opps[:5]):
-            title = f"RANK {i+1} | {op['sport']} | {op['time']} | Profit: ${op['profit']:.2f}"
+        for i, op in enumerate(sorted_opps[:10]):
+            # Helper to recalc profit for the $1.00 option on the fly
+            if op['strat'] == "Profit Boost (%)":
+                bsm = op['sm'] * (1 + (op['val']/100))
+                p_100 = min(((op['wager'] * bsm) - op['h_100']), ((op['h_100'] * op['hm']) - op['wager']))
+            elif op['strat'] == "Bonus Bet":
+                p_100 = min(((op['wager'] * op['sm']) - op['h_100']), (op['h_100'] * op['hm']))
+            else:
+                p_100 = min(((op['wager'] * op['sm']) - op['h_100']), ((op['h_100'] * op['hm']) + (op['wager'] * 0.65) - op['wager']))
+
+            title = f"RANK {i+1} | {op['sport']} | {op['game']} | Max Profit: ${max(op['profit'], p_100):.2f}"
+            
             with st.expander(title):
-                st.write(f"**{op['game']}**")
-                c1, c2, c3 = st.columns(3)
-                with c1:
+                st.write(f"**Market:** {op['game']} ({op['time']})")
+                
+                col_main, col_hedge1, col_hedge2 = st.columns([1.2, 1, 1])
+                
+                with col_main:
                     st.caption(f"SOURCE: {op['s_book'].upper()}")
-                    st.info(f"Bet **${p['wager']:.2f}** on {op['s_team']} @ **{op['s_price']:+}**")
-                with c2:
-                    st.caption(f"HEDGE: {op['h_book'].upper()}")
-                    st.success(f"Bet **${op['hedge']:.2f}** on {op['h_team']} @ **{op['h_price']:+}**")
-                with c3:
-                    st.metric("Net Profit", f"${op['profit']:.2f}")
+                    st.info(f"Bet **${op['wager']:.2f}** on **{op['s_team']}** @ **{op['s_price']:+}**")
+                
+                with col_hedge1:
+                    st.caption(f"HEDGE (Nearest $0.25)")
+                    st.success(f"Bet **${op['h_25']:.2f}** on **{op['h_team']}** @ **{op['h_price']:+}**")
+                    st.metric("Profit", f"${op['profit']:.2f}")
+
+                with col_hedge2:
+                    st.caption(f"HEDGE (Nearest $1.00)")
+                    st.success(f"Bet **${op['h_100']:.0f}.00** on **{op['h_team']}** @ **{op['h_price']:+}**")
+                    st.metric("Profit", f"${p_100:.2f}")
     st.divider()
 
 # --- HEADER AREA ---
@@ -181,8 +194,7 @@ st.divider()
 # --- INPUT AREA ---
 if 'promos' not in st.session_state: st.session_state.promos = []
 
-with st.expander("Promo Type", expanded=True):
-    # clear_on_submit=False keeps the dropdowns from resetting
+with st.expander("Promo Configuration", expanded=True):
     with st.form("promo_form", clear_on_submit=False):
         col1, col2, col3 = st.columns([2, 2, 1])
         with col1:
@@ -190,30 +202,26 @@ with st.expander("Promo Type", expanded=True):
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0, step=0.25)
-            v = st.number_input("Profit Boost (%) / Bonus Value", min_value=1, value=50)
+            v = st.number_input("Boost % / Bonus Val", min_value=1, value=50)
         with col3:
-            # Default to NBA for faster testing
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA"])
         
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
-            add_to_q = st.form_submit_button("Add to Scan Queue", use_container_width=True)
+            add_to_q = st.form_submit_button("Add to Queue", use_container_width=True)
         with btn_col2:
-            quick_scan = st.form_submit_button("Quick Scan (Instant)", use_container_width=True)
+            quick_scan = st.form_submit_button("Quick Scan", use_container_width=True)
 
-# --- QUICK SCAN ACTION ---
+# --- ACTIONS ---
 if quick_scan:
-    if not sp:
-        st.error("Please select at least one sport to scan.")
+    if not sp: st.error("Select a sport.")
     else:
         temp_p = {"book": b, "strat": s, "wager": w, "val": v, "sports": sp}
         results = run_promo_scan(temp_p)
         display_results(results, temp_p)
 
-# --- QUEUE LOGIC ---
 if add_to_q:
-    if not sp:
-        st.error("Please select at least one sport before adding to queue.")
+    if not sp: st.error("Select a sport.")
     else:
         st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp})
 
@@ -222,24 +230,19 @@ if st.session_state.promos:
     for i, p in enumerate(st.session_state.promos):
         q_col1, q_col2 = st.columns([9.2, 0.8])
         with q_col1:
-            sports_list = ", ".join(p['sports'])
-            st.info(f"**{p['book'].upper()}** | {p['strat']} | Wager: **${p['wager']:.2f}** | Boost/Val: **{p['val']}%** | Sports: **{sports_list}**")
+            st.info(f"**{p['book'].upper()}** | {p['strat']} | ${p['wager']} | {p['val']}% | {', '.join(p['sports'])}")
         with q_col2:
-            st.markdown('<div class="remove-btn">', unsafe_allow_html=True)
             if st.button("✕", key=f"rm_{i}"):
                 st.session_state.promos.pop(i)
                 st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
     
     run_col, clear_col = st.columns([4, 1])
     with run_col:
-        execute_all = st.button("Identify Opportunities (Queue)", use_container_width=True)
+        if st.button("Run Queue", use_container_width=True):
+            for p in st.session_state.promos:
+                results = run_promo_scan(p)
+                display_results(results, p)
     with clear_col:
         if st.button("Clear All", use_container_width=True):
             st.session_state.promos = []
             st.rerun()
-
-    if execute_all:
-        for p in st.session_state.promos:
-            results = run_promo_scan(p)
-            display_results(results, p)
