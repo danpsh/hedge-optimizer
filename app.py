@@ -27,18 +27,18 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    .remove-btn button {
-        background-color: #fef2f2 !important;
-        color: #ef4444 !important;
-        border: 1px solid #fee2e2 !important;
-        border-radius: 4px !important;
-        font-size: 0.8rem !important;
-        padding: 2px 8px !important;
-    }
-
     [data-testid="stMetricValue"] {
         font-family: 'Roboto Mono', monospace;
         font-size: 1.4rem !important;
+    }
+    
+    .promo-header {
+        background-color: #e2e8f0;
+        padding: 10px;
+        border-radius: 8px;
+        margin-top: 20px;
+        margin-bottom: 10px;
+        border-left: 5px solid #1e293b;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -69,7 +69,7 @@ def run_promo_scan(p):
     now_utc = datetime.now(timezone.utc)
     all_opps = []
     
-    with st.status(f"Scanning {p['book']}...", expanded=False) as status:
+    with st.status(f"Scanning {p['book']} markets...", expanded=False) as status:
         for sport_label in p['sports']:
             sport_key = sports_map[sport_label]
             url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
@@ -137,38 +137,36 @@ def run_promo_scan(p):
                                         "wager": p['wager']
                                     })
             except Exception as e: st.error(f"API Error: {e}")
-        status.update(label="Scanning Complete", state="complete")
+        status.update(label=f"Scan for {p['book']} Complete", state="complete")
     return all_opps
 
 def display_results(all_opps, p):
-    st.write(f"### Results for {p['book']}")
+    st.markdown(f"<div class='promo-header'><h3>Results for {p['book']} - {p['strat']}</h3></div>", unsafe_allow_html=True)
     sorted_opps = sorted(all_opps, key=lambda x: x['p_25'], reverse=True)
     
     if not sorted_opps:
-        st.warning(f"No matches found.")
+        st.warning(f"No profitable matches found for {p['book']}.")
     else:
         for i, op in enumerate(sorted_opps[:10]):
-            # Updated Rank Title to include Sport, Game, and Date/Time
-            title = f"RANK {i+1} | {op['sport']} | {op['game']} | {op['time']} | Profit: ${op['p_25']:.2f}"
+            title = f"RANK {i+1} | {op['game']} | Profit: ${op['p_25']:.2f}"
             
             with st.expander(title):
-                st.write(f"**Full Details:** {op['sport']} - {op['game']} ({op['time']})")
+                st.write(f"**Market:** {op['sport']} | **Kickoff:** {op['time']}")
                 c_main, c_h25, c_h100 = st.columns([1.2, 1, 1])
                 
                 with c_main:
-                    st.caption(f"SOURCE: {op['s_book'].upper()}")
+                    st.caption(f"SOURCE BOOK: **{op['s_book'].upper()}**")
                     st.info(f"Bet **${op['wager']:.2f}** on **{op['s_team']}** @ **{op['s_price']:+}**")
                 
                 with c_h25:
-                    st.caption(f"HEDGE (0.25)")
+                    st.caption(f"HEDGE BOOK: **{op['h_book'].upper()}** (.25)")
                     st.success(f"Bet **${op['h_25']:.2f}** on **{op['h_team']}** @ **{op['h_price']:+}**")
                     st.metric("Profit", f"${op['p_25']:.2f}")
 
                 with c_h100:
-                    st.caption(f"HEDGE (1.00)")
+                    st.caption(f"HEDGE BOOK: **{op['h_book'].upper()}** (Flat)")
                     st.success(f"Bet **${op['h_100']:.0f}.00** on **{op['h_team']}** @ **{op['h_price']:+}**")
                     st.metric("Profit", f"${op['p_100']:.2f}")
-    st.divider()
 
 # --- HEADER AREA ---
 c_title, c_quota = st.columns([3, 1])
@@ -227,10 +225,12 @@ if st.session_state.promos:
     
     run_col, clear_col = st.columns([4, 1])
     with run_col:
-        if st.button("Run Queue", use_container_width=True):
-            for p in st.session_state.promos:
-                results = run_promo_scan(p)
-                display_results(results, p)
+        if st.button("Run All in Queue", use_container_width=True):
+            for promo_item in st.session_state.promos:
+                # This ensures every book's results are visually separate
+                scan_results = run_promo_scan(promo_item)
+                display_results(scan_results, promo_item)
+                st.divider() # Separator between books
     with clear_col:
         if st.button("Clear All", use_container_width=True):
             st.session_state.promos = []
