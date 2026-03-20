@@ -102,6 +102,7 @@ def run_promo_scan(p):
                                 best_h = max(eligible, key=lambda x: x['price'])
                                 sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
                                 
+                                # Logic for Profit Boost, Bonus Bet, or No-Sweat
                                 if p['strat'] == "Profit Boost (%)":
                                     bsm = sm * (1 + (p['val']/100))
                                     raw_h = (p['wager'] * (1 + bsm)) / (1 + hm)
@@ -134,7 +135,8 @@ def run_promo_scan(p):
                                         "h_25": h_25, "h_100": h_100,
                                         "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
                                         "h_team": best_h['team'], "h_book": best_h['book'], "h_price": best_h['price'],
-                                        "wager": p['wager']
+                                        "wager": p['wager'],
+                                        "promo_val": p['val'] # Store for display
                                     })
             except Exception as e: st.error(f"API Error: {e}")
         status.update(label=f"Scan for {p['book']} Complete", state="complete")
@@ -147,11 +149,14 @@ def display_results(all_opps, p):
     if not sorted_opps:
         st.warning(f"No profitable matches found for {p['book']}.")
     else:
-        for i, op in enumerate(sorted_opps[:10]):
-            title = f"RANK {i+1} | {op['game']} | Profit: ${op['p_25']:.2f}"
+        # Show Top 5
+        for i, op in enumerate(sorted_opps[:5]):
+            # Added Boost/Bonus value and Date/Time/Teams to the Header
+            promo_label = f"{op['promo_val']}% Boost" if p['strat'] == "Profit Boost (%)" else f"${op['promo_val']} Bonus"
+            header_title = f"RANK {i+1} | {op['time']} | {op['game']} | {promo_label} | Profit: ${op['p_25']:.2f}"
             
-            with st.expander(title):
-                st.write(f"**Market:** {op['sport']} | **Kickoff:** {op['time']}")
+            with st.expander(header_title):
+                st.write(f"**Full Match Details:** {op['sport']} | {op['game']} | Kickoff: {op['time']}")
                 c_main, c_h25, c_h100 = st.columns([1.2, 1, 1])
                 
                 with c_main:
@@ -227,10 +232,9 @@ if st.session_state.promos:
     with run_col:
         if st.button("Run All in Queue", use_container_width=True):
             for promo_item in st.session_state.promos:
-                # This ensures every book's results are visually separate
                 scan_results = run_promo_scan(promo_item)
                 display_results(scan_results, promo_item)
-                st.divider() # Separator between books
+                st.divider() 
     with clear_col:
         if st.button("Clear All", use_container_width=True):
             st.session_state.promos = []
