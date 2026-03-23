@@ -56,7 +56,6 @@ book_map = {
     "BetMGM": "betmgm"
 }
 
-# ONLY ADDED MLB
 sports_map = {
     "NBA": "basketball_nba",
     "NCAA Men's": "basketball_ncaab",
@@ -203,7 +202,8 @@ with st.expander("Promo Configuration", expanded=True):
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0, step=0.25)
             v = st.number_input("Boost % / Bonus Val", min_value=1, value=50)
         with col3:
-            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA"])
+            # UPDATED: default is now empty instead of ["NBA"]
+            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[])
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
         
         btn_col1, btn_col2 = st.columns(2)
