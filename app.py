@@ -56,16 +56,17 @@ book_map = {
     "BetMGM": "betmgm"
 }
 
+# ONLY ADDED MLB
 sports_map = {
     "NBA": "basketball_nba",
     "NCAA Men's": "basketball_ncaab",
     "NCAA Women's": "basketball_ncaaw",
-    "NHL": "icehockey_nhl"
+    "NHL": "icehockey_nhl",
+    "MLB": "baseball_mlb"
 }
 
 # --- SCAN ENGINE ---
 def run_promo_scan(p):
-    # Determine which books are allowed for hedging
     if not p['hedge_books']:
         allowed_hedge_keys = [v for k, v in book_map.items() if k != p['book']]
     else:
@@ -92,7 +93,6 @@ def run_promo_scan(p):
 
                         source_odds, hedge_odds = [], []
                         for bm in game['bookmakers']:
-                            # Only process if it's the source book OR an allowed hedge book
                             if bm['key'] == source_book_key or bm['key'] in allowed_hedge_keys:
                                 outcomes = bm['markets'][0]['outcomes']
                                 for o in outcomes:
@@ -204,7 +204,6 @@ with st.expander("Promo Configuration", expanded=True):
             v = st.number_input("Boost % / Bonus Val", min_value=1, value=50)
         with col3:
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA"])
-            # ADDED: Hedge Book Filter (Empty = All)
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
         
         btn_col1, btn_col2 = st.columns(2)
