@@ -154,7 +154,7 @@ def run_promo_scan(p):
     return all_opps
 
 def display_results(all_opps, p):
-    st.markdown(f<div class='promo-header'><h3>Results for {p['book']} - {p['strat']}</h3></div>, unsafe_allow_html=True)
+    st.markdown(f"<div class='promo-header'><h3>Results for {p['book']} - {p['strat']}</h3></div>", unsafe_allow_html=True)
     sorted_opps = sorted(all_opps, key=lambda x: x['p_25'], reverse=True)
     
     if not sorted_opps:
