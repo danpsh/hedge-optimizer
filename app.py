@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Promo Converter", layout="wide")
 
-# --- PROFESSIONAL THEME ---
+# --- PROFESSIONAL THEME (Unchanged) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono&display=swap');
@@ -56,7 +56,6 @@ book_map = {
     "BetMGM": "betmgm"
 }
 
-# UPDATED: Fixed NCAA Women's key and included MLB
 sports_map = {
     "NBA": "basketball_nba",
     "NCAA Men's": "basketball_ncaab",
@@ -105,19 +104,22 @@ def run_promo_scan(p):
                         if not source_odds or not hedge_odds: continue
 
                         for s in source_odds:
+                            # --- NEW: MIN ODDS FILTER LOGIC ---
+                            if p['min_odds'] is not None and s['price'] < p['min_odds']:
+                                continue
+                            
                             opp_team = next(t for t in [game['home_team'], game['away_team']] if t != s['team'])
                             eligible = [h for h in hedge_odds if h['team'] == opp_team]
                             if eligible:
                                 best_h = max(eligible, key=lambda x: x['price'])
                                 sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
                                 
-                                # Calculations
                                 if p['strat'] == "Profit Boost (%)":
                                     bsm = sm * (1 + (p['val']/100))
                                     raw_h = (p['wager'] * (1 + bsm)) / (1 + hm)
                                 elif p['strat'] == "Bonus Bet":
                                     raw_h = (p['wager'] * sm) / (1 + hm)
-                                else: # No-Sweat Bet
+                                else: 
                                     mc = 0.65
                                     raw_h = (p['wager'] * (sm + (1 - mc))) / (hm + 1)
 
@@ -131,7 +133,7 @@ def run_promo_scan(p):
                                 elif p['strat'] == "Bonus Bet":
                                     p_25 = min(((p['wager'] * sm) - h_25), (h_25 * hm))
                                     p_100 = min(((p['wager'] * sm) - h_100), (h_100 * hm))
-                                else: # No-Sweat
+                                else:
                                     p_25 = min(((p['wager'] * sm) - h_25), ((h_25 * hm) + (p['wager'] * 0.65) - p['wager']))
                                     p_100 = min(((p['wager'] * sm) - h_100), ((h_100 * hm) + (p['wager'] * 0.65) - p['wager']))
 
@@ -152,11 +154,11 @@ def run_promo_scan(p):
     return all_opps
 
 def display_results(all_opps, p):
-    st.markdown(f"<div class='promo-header'><h3>Results for {p['book']} - {p['strat']}</h3></div>", unsafe_allow_html=True)
+    st.markdown(f<div class='promo-header'><h3>Results for {p['book']} - {p['strat']}</h3></div>, unsafe_allow_html=True)
     sorted_opps = sorted(all_opps, key=lambda x: x['p_25'], reverse=True)
     
     if not sorted_opps:
-        st.warning(f"No profitable matches found for {p['book']}.")
+        st.warning(f"No profitable matches found for {p['book']} matching your criteria.")
     else:
         for i, op in enumerate(sorted_opps[:5]):
             promo_label = f"{op['promo_val']}% Boost" if p['strat'] == "Profit Boost (%)" else f"${op['promo_val']} Bonus"
@@ -195,7 +197,7 @@ if 'promos' not in st.session_state: st.session_state.promos = []
 
 with st.expander("Promo Configuration", expanded=True):
     with st.form("promo_form", clear_on_submit=False):
-        col1, col2, col3 = st.columns([2, 2, 2])
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 2]) # Added 4th column
         with col1:
             b = st.selectbox("Source Book", list(book_map.keys()))
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
@@ -203,9 +205,12 @@ with st.expander("Promo Configuration", expanded=True):
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0, step=0.25)
             v = st.number_input("Boost % / Bonus Val", min_value=1, value=50)
         with col3:
-            # UPDATED: default is empty
-            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[])
+            # --- NEW: MIN ODDS INPUT (Allows "None" or a Number) ---
+            mo_toggle = st.checkbox("Apply Min Odds?", value=False)
+            mo = st.number_input("Min Odds (e.g. -200)", value=-200) if mo_toggle else None
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
+        with col4:
+            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[])
         
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
@@ -217,14 +222,14 @@ with st.expander("Promo Configuration", expanded=True):
 if quick_scan:
     if not sp: st.error("Select a sport.")
     else:
-        temp_p = {"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb}
+        temp_p = {"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb, "min_odds": mo}
         results = run_promo_scan(temp_p)
         display_results(results, temp_p)
 
 if add_to_q:
     if not sp: st.error("Select a sport.")
     else:
-        st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb})
+        st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb, "min_odds": mo})
 
 if st.session_state.promos:
     st.subheader("Scan Queue")
@@ -232,7 +237,9 @@ if st.session_state.promos:
         q_col1, q_col2 = st.columns([9.2, 0.8])
         with q_col1:
             hedge_label = ", ".join(p['hedge_books']) if p['hedge_books'] else "ALL"
-            st.info(f"**{p['book'].upper()}** vs **{hedge_label}** | {p['strat']} | ${p['wager']} | {p['val']}% | {', '.join(p['sports'])}")
+            # Updated info string to show Min Odds
+            mo_str = f" | Min Odds: {p['min_odds']:+}" if p['min_odds'] is not None else ""
+            st.info(f"**{p['book'].upper()}** vs **{hedge_label}** | {p['strat']} | ${p['wager']} | {p['val']}% | {', '.join(p['sports'])}{mo_str}")
         with q_col2:
             if st.button("✕", key=f"rm_{i}"):
                 st.session_state.promos.pop(i)
