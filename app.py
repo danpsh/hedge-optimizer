@@ -9,29 +9,24 @@ st.set_page_config(page_title="Promo Converter", layout="wide")
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono&display=swap');
-    
     .stApp { background-color: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; }
     h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; }
-
     div[data-testid="stExpander"] {
         background-color: #ffffff !important;
         border: 1px solid #e2e8f0 !important;
         border-radius: 12px !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-
     .stButton>button {
         background-color: #1e293b !important;
         color: #ffffff !important;
         border-radius: 6px !important;
         font-weight: 600 !important;
     }
-
     [data-testid="stMetricValue"] {
         font-family: 'Roboto Mono', monospace;
         font-size: 1.4rem !important;
     }
-    
     .promo-header {
         background-color: #e2e8f0;
         padding: 10px;
@@ -64,6 +59,23 @@ sports_map = {
     "MLB": "baseball_mlb"
 }
 
+# --- NEW: CACHED API FETCHING ---
+# ttl=300 means the data expires after 300 seconds (5 minutes)
+@st.cache_data(ttl=300)
+def fetch_odds(sport_key):
+    # This print only shows in your terminal/logs when a REAL API call happens
+    print(f"DEBUG: [!!!] FETCHING LIVE DATA FROM API for {sport_key}. Quota will be used.")
+    
+    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
+    params = {'apiKey': API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
+    
+    res = requests.get(url, params=params)
+    if res.status_code == 200:
+        # We return the data AND the remaining quota from headers
+        return res.json(), res.headers.get('x-requests-remaining', "0")
+    else:
+        return None, "Error"
+
 # --- SCAN ENGINE ---
 def run_promo_scan(p):
     if not p['hedge_books']:
@@ -75,77 +87,77 @@ def run_promo_scan(p):
     now_utc = datetime.now(timezone.utc)
     all_opps = []
     
-    with st.status(f"Scanning {p['book']} vs {p['hedge_books'] or 'All'}...", expanded=False) as status:
+    with st.status(f"Scanning {p['book']}...", expanded=False) as status:
         for sport_label in p['sports']:
             sport_key = sports_map[sport_label]
-            url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
-            params = {'apiKey': API_KEY, 'regions': 'us,us2', 'markets': 'h2h', 'oddsFormat': 'american'}
             
-            try:
-                res = requests.get(url, params=params)
-                if res.status_code == 200:
-                    st.session_state.api_quota = res.headers.get('x-requests-remaining', "0")
-                    games = res.json()
-                    for game in games:
-                        commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                        if commence_time <= now_utc: continue
+            # Use the cached function instead of requests.get
+            games, remaining = fetch_odds(sport_key)
+            
+            if games:
+                st.session_state.api_quota = remaining
+                for game in games:
+                    commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                    if commence_time <= now_utc: continue
 
-                        source_odds, hedge_odds = [], []
-                        for bm in game['bookmakers']:
-                            if bm['key'] == source_book_key or bm['key'] in allowed_hedge_keys:
-                                outcomes = bm['markets'][0]['outcomes']
-                                for o in outcomes:
-                                    entry = {'book': bm['title'], 'team': o['name'], 'price': o['price']}
-                                    if bm['key'] == source_book_key: 
-                                        source_odds.append(entry)
-                                    elif bm['key'] in allowed_hedge_keys: 
-                                        hedge_odds.append(entry)
-                        
-                        if not source_odds or not hedge_odds: continue
+                    source_odds, hedge_odds = [], []
+                    for bm in game['bookmakers']:
+                        if bm['key'] == source_book_key or bm['key'] in allowed_hedge_keys:
+                            outcomes = bm['markets'][0]['outcomes']
+                            for o in outcomes:
+                                entry = {'book': bm['title'], 'team': o['name'], 'price': o['price']}
+                                if bm['key'] == source_book_key: 
+                                    source_odds.append(entry)
+                                elif bm['key'] in allowed_hedge_keys: 
+                                    hedge_odds.append(entry)
+                    
+                    if not source_odds or not hedge_odds: continue
 
-                        for s in source_odds:
-                            opp_team = next(t for t in [game['home_team'], game['away_team']] if t != s['team'])
-                            eligible = [h for h in hedge_odds if h['team'] == opp_team]
-                            if eligible:
-                                best_h = max(eligible, key=lambda x: x['price'])
-                                sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
-                                
-                                if p['strat'] == "Profit Boost (%)":
-                                    bsm = sm * (1 + (p['val']/100))
-                                    raw_h = (p['wager'] * (1 + bsm)) / (1 + hm)
-                                elif p['strat'] == "Bonus Bet":
-                                    raw_h = (p['wager'] * sm) / (1 + hm)
-                                else: 
-                                    mc = 0.65
-                                    raw_h = (p['wager'] * (sm + (1 - mc))) / (hm + 1)
+                    for s in source_odds:
+                        opp_team = next(t for t in [game['home_team'], game['away_team']] if t != s['team'])
+                        eligible = [h for h in hedge_odds if h['team'] == opp_team]
+                        if eligible:
+                            best_h = max(eligible, key=lambda x: x['price'])
+                            sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
+                            
+                            if p['strat'] == "Profit Boost (%)":
+                                bsm = sm * (1 + (p['val']/100))
+                                raw_h = (p['wager'] * (1 + bsm)) / (1 + hm)
+                            elif p['strat'] == "Bonus Bet":
+                                raw_h = (p['wager'] * sm) / (1 + hm)
+                            else: 
+                                mc = 0.65
+                                raw_h = (p['wager'] * (sm + (1 - mc))) / (hm + 1)
 
-                                h_25 = round(raw_h * 4) / 4
-                                h_100 = float(round(raw_h))
+                            h_25 = round(raw_h * 4) / 4
+                            h_100 = float(round(raw_h))
 
-                                if p['strat'] == "Profit Boost (%)":
-                                    bsm = sm * (1 + (p['val']/100))
-                                    p_25 = min(((p['wager'] * bsm) - h_25), ((h_25 * hm) - p['wager']))
-                                    p_100 = min(((p['wager'] * bsm) - h_100), ((h_100 * hm) - p['wager']))
-                                elif p['strat'] == "Bonus Bet":
-                                    p_25 = min(((p['wager'] * sm) - h_25), (h_25 * hm))
-                                    p_100 = min(((p['wager'] * sm) - h_100), (h_100 * hm))
-                                else:
-                                    p_25 = min(((p['wager'] * sm) - h_25), ((h_25 * hm) + (p['wager'] * 0.65) - p['wager']))
-                                    p_100 = min(((p['wager'] * sm) - h_100), ((h_100 * hm) + (p['wager'] * 0.65) - p['wager']))
+                            if p['strat'] == "Profit Boost (%)":
+                                bsm = sm * (1 + (p['val']/100))
+                                p_25 = min(((p['wager'] * bsm) - h_25), ((h_25 * hm) - p['wager']))
+                                p_100 = min(((p['wager'] * bsm) - h_100), ((h_100 * hm) - p['wager']))
+                            elif p['strat'] == "Bonus Bet":
+                                p_25 = min(((p['wager'] * sm) - h_25), (h_25 * hm))
+                                p_100 = min(((p['wager'] * sm) - h_100), (h_100 * hm))
+                            else:
+                                p_25 = min(((p['wager'] * sm) - h_25), ((h_25 * hm) + (p['wager'] * 0.65) - p['wager']))
+                                p_100 = min(((p['wager'] * sm) - h_100), ((h_100 * hm) + (p['wager'] * 0.65) - p['wager']))
 
-                                if p_25 > -5.0:
-                                    all_opps.append({
-                                        "game": f"{game['away_team']} vs {game['home_team']}",
-                                        "sport": sport_label,
-                                        "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
-                                        "p_25": p_25, "p_100": p_100,
-                                        "h_25": h_25, "h_100": h_100,
-                                        "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
-                                        "h_book": best_h['book'], "h_team": best_h['team'], "h_price": best_h['price'],
-                                        "wager": p['wager'],
-                                        "promo_val": p['val']
-                                    })
-            except Exception as e: st.error(f"API Error: {e}")
+                            if p_25 > -5.0:
+                                all_opps.append({
+                                    "game": f"{game['away_team']} vs {game['home_team']}",
+                                    "sport": sport_label,
+                                    "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
+                                    "p_25": p_25, "p_100": p_100,
+                                    "h_25": h_25, "h_100": h_100,
+                                    "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
+                                    "h_book": best_h['book'], "h_team": best_h['team'], "h_price": best_h['price'],
+                                    "wager": p['wager'],
+                                    "promo_val": p['val']
+                                })
+            else:
+                st.error(f"Could not fetch data for {sport_label}")
+
         status.update(label=f"Scan for {p['book']} Complete", state="complete")
     return all_opps
 
@@ -154,7 +166,7 @@ def display_results(all_opps, p):
     sorted_opps = sorted(all_opps, key=lambda x: x['p_25'], reverse=True)
     
     if not sorted_opps:
-        st.warning(f"No profitable matches found for {p['book']} matching your criteria.")
+        st.warning(f"No profitable matches found for {p['book']}.")
     else:
         for i, op in enumerate(sorted_opps[:5]):
             promo_label = f"{op['promo_val']}% Boost" if p['strat'] == "Profit Boost (%)" else f"${op['promo_val']} Bonus"
@@ -236,7 +248,7 @@ if st.session_state.promos:
                 st.session_state.promos.pop(i)
                 st.rerun()
     
-    run_col, clear_col = st.columns([4, 1])
+    run_col, clear_col, cache_col = st.columns([3, 1, 1])
     with run_col:
         if st.button("Run All in Queue", use_container_width=True):
             for promo_item in st.session_state.promos:
@@ -244,6 +256,10 @@ if st.session_state.promos:
                 display_results(scan_results, promo_item)
                 st.divider() 
     with clear_col:
-        if st.button("Clear All", use_container_width=True):
+        if st.button("Clear Queue", use_container_width=True):
             st.session_state.promos = []
             st.rerun()
+    with cache_col:
+        if st.button("Clear Cache", use_container_width=True):
+            st.cache_data.clear()
+            st.toast("Cache cleared! Next scan will be live.")
