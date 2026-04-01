@@ -104,10 +104,6 @@ def run_promo_scan(p):
                         if not source_odds or not hedge_odds: continue
 
                         for s in source_odds:
-                            # --- NEW: MIN ODDS FILTER LOGIC ---
-                            if p['min_odds'] is not None and s['price'] < p['min_odds']:
-                                continue
-                            
                             opp_team = next(t for t in [game['home_team'], game['away_team']] if t != s['team'])
                             eligible = [h for h in hedge_odds if h['team'] == opp_team]
                             if eligible:
@@ -197,7 +193,7 @@ if 'promos' not in st.session_state: st.session_state.promos = []
 
 with st.expander("Promo Configuration", expanded=True):
     with st.form("promo_form", clear_on_submit=False):
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 2]) # Added 4th column
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
         with col1:
             b = st.selectbox("Source Book", list(book_map.keys()))
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
@@ -205,9 +201,6 @@ with st.expander("Promo Configuration", expanded=True):
             w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0, step=0.25)
             v = st.number_input("Boost % / Bonus Val", min_value=1, value=50)
         with col3:
-            # --- NEW: MIN ODDS INPUT (Allows "None" or a Number) ---
-            mo_toggle = st.checkbox("Apply Min Odds?", value=False)
-            mo = st.number_input("Min Odds (e.g. -200)", value=-200) if mo_toggle else None
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
         with col4:
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[])
@@ -222,14 +215,14 @@ with st.expander("Promo Configuration", expanded=True):
 if quick_scan:
     if not sp: st.error("Select a sport.")
     else:
-        temp_p = {"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb, "min_odds": mo}
+        temp_p = {"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb}
         results = run_promo_scan(temp_p)
         display_results(results, temp_p)
 
 if add_to_q:
     if not sp: st.error("Select a sport.")
     else:
-        st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb, "min_odds": mo})
+        st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb})
 
 if st.session_state.promos:
     st.subheader("Scan Queue")
@@ -237,9 +230,7 @@ if st.session_state.promos:
         q_col1, q_col2 = st.columns([9.2, 0.8])
         with q_col1:
             hedge_label = ", ".join(p['hedge_books']) if p['hedge_books'] else "ALL"
-            # Updated info string to show Min Odds
-            mo_str = f" | Min Odds: {p['min_odds']:+}" if p['min_odds'] is not None else ""
-            st.info(f"**{p['book'].upper()}** vs **{hedge_label}** | {p['strat']} | ${p['wager']} | {p['val']}% | {', '.join(p['sports'])}{mo_str}")
+            st.info(f"**{p['book'].upper()}** vs **{hedge_label}** | {p['strat']} | ${p['wager']} | {p['val']}% | {', '.join(p['sports'])}")
         with q_col2:
             if st.button("✕", key=f"rm_{i}"):
                 st.session_state.promos.pop(i)
