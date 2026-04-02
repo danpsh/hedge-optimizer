@@ -1,31 +1,5 @@
-🎯 Arb Terminal: Promo Converter
-A professional-grade, real-time betting terminal built with Streamlit. This tool automates the process of "matched betting" by scanning live markets via The Odds API to convert sportsbook promotions—Bonus Bets, Profit Boosts, and No-Sweat Bets—into guaranteed cash.
-
-🚀 Key Features
-Live Market Scanner: Integrated with The Odds API to fetch real-time American odds across major US books (DraftKings, FanDuel, BetMGM, ESPN Bet, etc.).
-
-Multi-Strategy Logic:
-
-Profit Booster: Optimized for boosted net winnings.
-
-Bonus Bet (SNR): High-precision conversion for "Stake Not Returned" credits.
-
-No-Sweat Optimizer: Advanced math factoring in a 70% retention value on potential bonus bet refunds.
-
-Smart Filtering: Filter by sport (NBA, NHL, MMA, etc.) and specific "Hedge Books" to find the tightest lines.
-
-Visual Ranker: Opportunities are ranked by ROI and color-coded (🟢/🔴) based on hedge efficiency.
-
-Manual Calculator: A built-in sandbox to calculate hedges for markets not covered by the API.
-
-🛠️ Technical Stack
-Frontend: Streamlit (Custom CSS for "Light Tech" terminal aesthetics).
-
-Backend: Python 3.x / Requests.
-
-API: The Odds API (v4).
-
-Math: Native American-to-Decimal conversion and weighted hedging algorithms.
-
----
-*Disclaimer: This tool is for educational and informational purposes only. Please gamble responsibly.*
+This is a comprehensive README.md tailored to your Streamlit application. It highlights the professional UI, the specific betting strategies implemented in your code, and the technical setup required.🎯 Promo ConverterA professional-grade sports betting arbitrage and promotion conversion tool built with Streamlit. This application helps bettors maximize the value of sportsbook promotions (Profit Boosts, Bonus Bets, and No-Sweat Bets) by identifying optimal hedge opportunities using real-time market data.✨ FeaturesReal-Time Odds Integration: Fetches live data via The Odds API.Three Core Strategies:Profit Boost (%): Calculates the best way to lock in profit using a percentage-based boost on a source book.Bonus Bet: Maximizes the conversion rate of "non-stake returned" bonus credits.No-Sweat Bet: Optimizes "risk-free" bets, accounting for the typical 65% conversion rate of returned bonus bets.Multi-Book Scanning: Support for DraftKings, FanDuel, BetMGM, and ESPN Bet.Smart Filtering: Automatically filters for upcoming events (8-day lookahead) and excludes games that have already started.Dynamic Queue System: Add multiple promos to a queue to run batch scans across different sports and books simultaneously.Professional UI: Custom CSS styling with "Inter" typography, dark-mode elements, and responsive layouts.🚀 Getting Started1. PrerequisitesPython 3.8+An API Key from The Odds API (Free tier available).2. InstallationClone the repository and install the required dependencies:Bashpip install streamlit requests
+3. ConfigurationThe app uses st.secrets to manage the API key securely. Create a directory and file at .streamlit/secrets.toml in your project root:Ini, TOML# .streamlit/secrets.toml
+ODDS_API_KEY = "your_api_key_here"
+4. Running the AppBashstreamlit run app.py
+🛠 How It WorksThe MathThe converter uses American odds conversion to calculate multipliers ($m$):For Positive Odds (+): $m = \text{odds} / 100$For Negative Odds (-): $m = 100 / |\text{odds}|$It then calculates the optimal hedge wager ($h$) to ensure equal profit (or minimal loss) regardless of the game outcome, depending on the selected strategy.Supported Sports🏀 NBA & NCAA (Men's/Women's)🏒 NHL⚾ MLB🥊 UFC/MMA🖥 User Interface GuidePromo Configuration: Input your source book, the type of promo, and your wager amount.Hedge Books: Select which books you have funds in to use as the "counter" bet. Leave blank to scan all available books.Scan Queue: Use "Add to Queue" to build a list of multiple promos you need to hedge, then "Run All" to see a consolidated report.Results:Ranked Matches: The app sorts matches by highest guaranteed profit.Precision Options: Provides both a .25 centered hedge (for betting shops that limit to quarters) and a Flat hedge (whole dollars).⚠️ DisclaimerThis tool is for informational purposes only. Sports betting involves risk. Always double-check live odds on the respective sportsbooks before placing wagers, as API data can have a slight delay.
