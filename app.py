@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Promo Converter", layout="wide")
 
-# --- PROFESSIONAL THEME (Unchanged) ---
+# --- PROFESSIONAL THEME ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono&display=swap');
@@ -56,22 +56,19 @@ sports_map = {
     "NCAA Men's": "basketball_ncaab",
     "NCAA Women's": "basketball_wncaab",
     "NHL": "icehockey_nhl",
-    "MLB": "baseball_mlb"
+    "MLB": "baseball_mlb",
+    "UFC/MMA": "mma_mixed_martial_arts" # Added UFC/MMA key
 }
 
-# --- NEW: CACHED API FETCHING ---
-# ttl=300 means the data expires after 300 seconds (5 minutes)
+# --- CACHED API FETCHING ---
 @st.cache_data(ttl=300)
 def fetch_odds(sport_key):
-    # This print only shows in your terminal/logs when a REAL API call happens
-    print(f"DEBUG: [!!!] FETCHING LIVE DATA FROM API for {sport_key}. Quota will be used.")
-    
+    print(f"DEBUG: FETCHING LIVE DATA for {sport_key}.")
     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
     params = {'apiKey': API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
     
     res = requests.get(url, params=params)
     if res.status_code == 200:
-        # We return the data AND the remaining quota from headers
         return res.json(), res.headers.get('x-requests-remaining', "0")
     else:
         return None, "Error"
@@ -85,20 +82,24 @@ def run_promo_scan(p):
 
     source_book_key = book_map[p['book']]
     now_utc = datetime.now(timezone.utc)
+    # NEW: Filter for only upcoming events (e.g., within 8 days)
+    lookahead_limit = now_utc + timedelta(days=8)
+    
     all_opps = []
     
     with st.status(f"Scanning {p['book']}...", expanded=False) as status:
         for sport_label in p['sports']:
             sport_key = sports_map[sport_label]
-            
-            # Use the cached function instead of requests.get
             games, remaining = fetch_odds(sport_key)
             
             if games:
                 st.session_state.api_quota = remaining
                 for game in games:
                     commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                    if commence_time <= now_utc: continue
+                    
+                    # FILTER: Skip if already started OR if it's more than 8 days away
+                    if commence_time <= now_utc or commence_time > lookahead_limit:
+                        continue
 
                     source_odds, hedge_odds = [], []
                     for bm in game['bookmakers']:
@@ -114,6 +115,7 @@ def run_promo_scan(p):
                     if not source_odds or not hedge_odds: continue
 
                     for s in source_odds:
+                        # Find the opponent
                         opp_team = next(t for t in [game['home_team'], game['away_team']] if t != s['team'])
                         eligible = [h for h in hedge_odds if h['team'] == opp_team]
                         if eligible:
@@ -125,7 +127,7 @@ def run_promo_scan(p):
                                 raw_h = (p['wager'] * (1 + bsm)) / (1 + hm)
                             elif p['strat'] == "Bonus Bet":
                                 raw_h = (p['wager'] * sm) / (1 + hm)
-                            else: 
+                            else: # No-Sweat Bet
                                 mc = 0.65
                                 raw_h = (p['wager'] * (sm + (1 - mc))) / (hm + 1)
 
@@ -143,7 +145,7 @@ def run_promo_scan(p):
                                 p_25 = min(((p['wager'] * sm) - h_25), ((h_25 * hm) + (p['wager'] * 0.65) - p['wager']))
                                 p_100 = min(((p['wager'] * sm) - h_100), ((h_100 * hm) + (p['wager'] * 0.65) - p['wager']))
 
-                            if p_25 > -5.0:
+                            if p_25 > -10.0: # Show even slightly losing hedges for context
                                 all_opps.append({
                                     "game": f"{game['away_team']} vs {game['home_team']}",
                                     "sport": sport_label,
@@ -169,7 +171,7 @@ def display_results(all_opps, p):
         st.warning(f"No profitable matches found for {p['book']}.")
     else:
         for i, op in enumerate(sorted_opps[:5]):
-            promo_label = f"{op['promo_val']}% Boost" if p['strat'] == "Profit Boost (%)" else f"${op['promo_val']} Bonus"
+            promo_label = f"{op['promo_val']}% Boost" if p['strat'] == "Profit Boost (%)" else f"${op['promo_val']} Value"
             header_title = f"RANK {i+1} | {op['time']} | {op['game']} | {promo_label} | Profit: ${op['p_25']:.2f}"
             
             with st.expander(header_title):
@@ -215,7 +217,7 @@ with st.expander("Promo Configuration", expanded=True):
         with col3:
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
         with col4:
-            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[])
+            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "UFC/MMA"])
         
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
