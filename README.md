@@ -1,7 +1,3 @@
-This is a comprehensive README.md tailored to your Streamlit application. It highlights the professional UI, the specific betting strategies implemented in your code, and the technical setup required.
-
----
-
 # 🎯 Promo Converter
 
 A professional-grade sports betting arbitrage and promotion conversion tool built with **Streamlit**. This application helps bettors maximize the value of sportsbook promotions (Profit Boosts, Bonus Bets, and No-Sweat Bets) by identifying optimal hedge opportunities using real-time market data.
