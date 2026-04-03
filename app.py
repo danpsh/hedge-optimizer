@@ -44,6 +44,7 @@ API_KEY = st.secrets.get("ODDS_API_KEY", "")
 def get_multiplier(american_odds):
     return (american_odds / 100) if american_odds > 0 else (100 / abs(american_odds))
 
+# UPDATE: book_map uses 'espnbet' for theScore/ESPN integration
 book_map = {
     "DraftKings": "draftkings", 
     "FanDuel": "fanduel",
@@ -51,13 +52,13 @@ book_map = {
     "BetMGM": "betmgm"
 }
 
+# UPDATE: Targeted sports list for current season
 sports_map = {
     "NBA": "basketball_nba",
     "NCAA Men's": "basketball_ncaab",
     "NCAA Women's": "basketball_wncaab",
     "NHL": "icehockey_nhl",
-    "MLB": "baseball_mlb",
-    "UFC/MMA": "mma_mixed_martial_arts" # Added UFC/MMA key
+    "MLB": "baseball_mlb"
 }
 
 # --- CACHED API FETCHING ---
@@ -65,7 +66,14 @@ sports_map = {
 def fetch_odds(sport_key):
     print(f"DEBUG: FETCHING LIVE DATA for {sport_key}.")
     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
-    params = {'apiKey': API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
+    
+    # UPDATE: Included 'us2' region to pull in theScore/ESPN Bet
+    params = {
+        'apiKey': API_KEY, 
+        'regions': 'us,us2', 
+        'markets': 'h2h', 
+        'oddsFormat': 'american'
+    }
     
     res = requests.get(url, params=params)
     if res.status_code == 200:
@@ -82,7 +90,6 @@ def run_promo_scan(p):
 
     source_book_key = book_map[p['book']]
     now_utc = datetime.now(timezone.utc)
-    # NEW: Filter for only upcoming events (e.g., within 8 days)
     lookahead_limit = now_utc + timedelta(days=8)
     
     all_opps = []
@@ -97,7 +104,6 @@ def run_promo_scan(p):
                 for game in games:
                     commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                     
-                    # FILTER: Skip if already started OR if it's more than 8 days away
                     if commence_time <= now_utc or commence_time > lookahead_limit:
                         continue
 
@@ -115,7 +121,6 @@ def run_promo_scan(p):
                     if not source_odds or not hedge_odds: continue
 
                     for s in source_odds:
-                        # Find the opponent
                         opp_team = next(t for t in [game['home_team'], game['away_team']] if t != s['team'])
                         eligible = [h for h in hedge_odds if h['team'] == opp_team]
                         if eligible:
@@ -145,7 +150,7 @@ def run_promo_scan(p):
                                 p_25 = min(((p['wager'] * sm) - h_25), ((h_25 * hm) + (p['wager'] * 0.65) - p['wager']))
                                 p_100 = min(((p['wager'] * sm) - h_100), ((h_100 * hm) + (p['wager'] * 0.65) - p['wager']))
 
-                            if p_25 > -10.0: # Show even slightly losing hedges for context
+                            if p_25 > -10.0:
                                 all_opps.append({
                                     "game": f"{game['away_team']} vs {game['home_team']}",
                                     "sport": sport_label,
@@ -217,7 +222,8 @@ with st.expander("Promo Configuration", expanded=True):
         with col3:
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
         with col4:
-            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "UFC/MMA"])
+            # Defaulted to NBA/MLB as requested
+            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "MLB"])
         
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
