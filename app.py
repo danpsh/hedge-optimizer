@@ -44,7 +44,6 @@ API_KEY = st.secrets.get("ODDS_API_KEY", "")
 def get_multiplier(american_odds):
     return (american_odds / 100) if american_odds > 0 else (100 / abs(american_odds))
 
-# UPDATE: book_map uses 'espnbet' for theScore/ESPN integration
 book_map = {
     "DraftKings": "draftkings", 
     "FanDuel": "fanduel",
@@ -52,7 +51,6 @@ book_map = {
     "BetMGM": "betmgm"
 }
 
-# UPDATE: Targeted sports list for current season
 sports_map = {
     "NBA": "basketball_nba",
     "NCAA Men's": "basketball_ncaab",
@@ -64,17 +62,13 @@ sports_map = {
 # --- CACHED API FETCHING ---
 @st.cache_data(ttl=300)
 def fetch_odds(sport_key):
-    print(f"DEBUG: FETCHING LIVE DATA for {sport_key}.")
     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
-    
-    # UPDATE: Included 'us2' region to pull in theScore/ESPN Bet
     params = {
         'apiKey': API_KEY, 
         'regions': 'us,us2', 
         'markets': 'h2h', 
         'oddsFormat': 'american'
     }
-    
     res = requests.get(url, params=params)
     if res.status_code == 200:
         return res.json(), res.headers.get('x-requests-remaining', "0")
@@ -91,7 +85,6 @@ def run_promo_scan(p):
     source_book_key = book_map[p['book']]
     now_utc = datetime.now(timezone.utc)
     lookahead_limit = now_utc + timedelta(days=8)
-    
     all_opps = []
     
     with st.status(f"Scanning {p['book']}...", expanded=False) as status:
@@ -103,7 +96,6 @@ def run_promo_scan(p):
                 st.session_state.api_quota = remaining
                 for game in games:
                     commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                    
                     if commence_time <= now_utc or commence_time > lookahead_limit:
                         continue
 
@@ -132,7 +124,7 @@ def run_promo_scan(p):
                                 raw_h = (p['wager'] * (1 + bsm)) / (1 + hm)
                             elif p['strat'] == "Bonus Bet":
                                 raw_h = (p['wager'] * sm) / (1 + hm)
-                            else: # No-Sweat Bet
+                            else: # No-Sweat
                                 mc = 0.65
                                 raw_h = (p['wager'] * (sm + (1 - mc))) / (hm + 1)
 
@@ -182,16 +174,13 @@ def display_results(all_opps, p):
             with st.expander(header_title):
                 st.write(f"**Full Match Details:** {op['sport']} | {op['game']} | Kickoff: {op['time']}")
                 c_main, c_h25, c_h100 = st.columns([1.2, 1, 1])
-                
                 with c_main:
                     st.caption(f"SOURCE BOOK: **{op['s_book'].upper()}**")
                     st.info(f"Bet **${op['wager']:.2f}** on **{op['s_team']}** @ **{op['s_price']:+}**")
-                
                 with c_h25:
                     st.caption(f"HEDGE BOOK: **{op['h_book'].upper()}** (.25)")
                     st.success(f"Bet **${op['h_25']:.2f}** on **{op['h_team']}** @ **{op['h_price']:+}**")
                     st.metric("Profit", f"${op['p_25']:.2f}")
-
                 with c_h100:
                     st.caption(f"HEDGE BOOK: **{op['h_book'].upper()}** (Flat)")
                     st.success(f"Bet **${op['h_100']:.0f}.00** on **{op['h_team']}** @ **{op['h_price']:+}**")
@@ -217,13 +206,13 @@ with st.expander("Promo Configuration", expanded=True):
             b = st.selectbox("Source Book", list(book_map.keys()))
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
-            w = st.number_input("Wager Amount ($)", min_value=1.0, value=50.0, step=0.25)
-            v = st.number_input("Boost % / Bonus Val", min_value=1, value=50)
+            w = st.number_input("Wager Amount ($)", min_value=0.0, value=0.0, step=1.0)
+            v = st.number_input("Boost % / Bonus Val", min_value=0, value=0)
         with col3:
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
         with col4:
-            # Defaulted to NBA/MLB as requested
-            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["NBA", "MLB"])
+            # REMOVED defaults
+            sp = st.multiselect("Sports Filter", list(sports_map.keys()), placeholder="Select sports...")
         
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
@@ -233,14 +222,16 @@ with st.expander("Promo Configuration", expanded=True):
 
 # --- ACTIONS ---
 if quick_scan:
-    if not sp: st.error("Select a sport.")
+    if not sp: st.error("Select at least one sport.")
+    elif w <= 0: st.error("Enter a wager amount.")
     else:
         temp_p = {"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb}
         results = run_promo_scan(temp_p)
         display_results(results, temp_p)
 
 if add_to_q:
-    if not sp: st.error("Select a sport.")
+    if not sp: st.error("Select at least one sport.")
+    elif w <= 0: st.error("Enter a wager amount.")
     else:
         st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb})
 
@@ -270,4 +261,4 @@ if st.session_state.promos:
     with cache_col:
         if st.button("Clear Cache", use_container_width=True):
             st.cache_data.clear()
-            st.toast("Cache cleared! Next scan will be live.")
+            st.toast("Cache cleared!")
