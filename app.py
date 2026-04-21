@@ -166,10 +166,10 @@ def display_results(all_opps, p):
         st.warning(f"No profitable matches found for {p['book']}.")
     else:
         for i, op in enumerate(sorted_opps[:5]):
-            # Calculate Conversion Rate for Bonus Bet
+            # Conversion Logic
             if p['strat'] == "Bonus Bet":
                 conv_rate = (op['p_25'] / op['wager']) * 100
-                conv_str = f" | {conv_rate:.1f}% Conv"
+                conv_str = f" | {conv_rate:.1f}% Conversion"
             else:
                 conv_str = ""
 
@@ -177,7 +177,7 @@ def display_results(all_opps, p):
             header_title = f"RANK {i+1} | {op['time']} | {op['game']}{conv_str} | Profit: ${op['p_25']:.2f}"
             
             with st.expander(header_title):
-                st.write(f"**Full Match Details:** {op['sport']} | {op['game']} | Kickoff: {op['time']}")
+                st.write(f"**Full Match Details:** {op['sport']} | {op['game']} | Start Time: {op['time']}")
                 c_main, c_h25, c_h100 = st.columns([1.2, 1, 1])
                 with c_main:
                     st.caption(f"SOURCE BOOK: **{op['s_book'].upper()}**")
