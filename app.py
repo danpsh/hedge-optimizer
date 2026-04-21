@@ -51,10 +51,9 @@ book_map = {
     "BetMGM": "betmgm"
 }
 
+# Updated sports_map: College basketball removed
 sports_map = {
     "NBA": "basketball_nba",
-    "NCAA Men's": "basketball_ncaab",
-    "NCAA Women's": "basketball_wncaab",
     "NHL": "icehockey_nhl",
     "MLB": "baseball_mlb"
 }
@@ -211,7 +210,6 @@ with st.expander("Promo Configuration", expanded=True):
         with col3:
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
         with col4:
-            # REMOVED defaults
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), placeholder="Select sports...")
         
         btn_col1, btn_col2 = st.columns(2)
