@@ -51,7 +51,6 @@ book_map = {
     "BetMGM": "betmgm"
 }
 
-# Updated sports_map: College basketball removed
 sports_map = {
     "NBA": "basketball_nba",
     "NHL": "icehockey_nhl",
@@ -167,8 +166,15 @@ def display_results(all_opps, p):
         st.warning(f"No profitable matches found for {p['book']}.")
     else:
         for i, op in enumerate(sorted_opps[:5]):
+            # Calculate Conversion Rate for Bonus Bet
+            if p['strat'] == "Bonus Bet":
+                conv_rate = (op['p_25'] / op['wager']) * 100
+                conv_str = f" | {conv_rate:.1f}% Conv"
+            else:
+                conv_str = ""
+
             promo_label = f"{op['promo_val']}% Boost" if p['strat'] == "Profit Boost (%)" else f"${op['promo_val']} Value"
-            header_title = f"RANK {i+1} | {op['time']} | {op['game']} | {promo_label} | Profit: ${op['p_25']:.2f}"
+            header_title = f"RANK {i+1} | {op['time']} | {op['game']}{conv_str} | Profit: ${op['p_25']:.2f}"
             
             with st.expander(header_title):
                 st.write(f"**Full Match Details:** {op['sport']} | {op['game']} | Kickoff: {op['time']}")
