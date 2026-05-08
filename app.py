@@ -51,8 +51,10 @@ book_map = {
     "BetMGM": "betmgm"
 }
 
+# WNBA ADDED HERE
 sports_map = {
     "NBA": "basketball_nba",
+    "WNBA": "basketball_wnba",
     "NHL": "icehockey_nhl",
     "MLB": "baseball_mlb"
 }
@@ -165,7 +167,6 @@ def display_results(all_opps, p):
     if not sorted_opps:
         st.warning(f"No profitable matches found for {p['book']}.")
     else:
-        # Changed slice from [:5] to [:10] to show 10 results
         for i, op in enumerate(sorted_opps[:10]):
             if p['strat'] == "Bonus Bet":
                 conv_rate = (op['p_25'] / op['wager']) * 100
@@ -173,7 +174,6 @@ def display_results(all_opps, p):
             else:
                 conv_str = ""
 
-            promo_label = f"{op['promo_val']}% Boost" if p['strat'] == "Profit Boost (%)" else f"${op['promo_val']} Value"
             header_title = f"RANK {i+1} | {op['time']} | {op['game']}{conv_str} | Profit: ${op['p_25']:.2f}"
             
             with st.expander(header_title):
