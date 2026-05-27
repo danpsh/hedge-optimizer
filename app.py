@@ -51,15 +51,12 @@ book_map = {
     "BetMGM": "betmgm"
 }
 
-# TENNIS ADDED HERE
+# --- ACTIVE SPORTS (Tennis Removed) ---
 sports_map = {
     "NBA": "basketball_nba",
     "WNBA": "basketball_wnba",
     "NHL": "icehockey_nhl",
-    "MLB": "baseball_mlb",
-    "ATP Rome": "tennis_atp_italian_open",
-    "WTA Rome": "tennis_wta_italian_open",
-    "Tennis (General)": "tennis_upcoming"
+    "MLB": "baseball_mlb"
 }
 
 # --- CACHED API FETCHING ---
@@ -116,7 +113,6 @@ def run_promo_scan(p):
                     if not source_odds or not hedge_odds: continue
 
                     for s in source_odds:
-                        # Logic to find opponent: for tennis this handles the 2-player field
                         opp_team = next((t for t in [game['home_team'], game['away_team']] if t != s['team']), None)
                         if not opp_team: continue
                         
