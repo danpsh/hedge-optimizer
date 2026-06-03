@@ -57,7 +57,8 @@ sports_map = {
     "WNBA": "basketball_wnba",
     "NHL": "icehockey_nhl",
     "MLB": "baseball_mlb",
-    "French Open": "tennis_fr_open"  # Added French Open
+    "French Open (Men)": "tennis_atp_french_open",
+    "French Open (Women)": "tennis_wta_french_open"
 }
 
 # --- CACHED API FETCHING ---
