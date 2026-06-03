@@ -56,7 +56,8 @@ sports_map = {
     "NBA": "basketball_nba",
     "WNBA": "basketball_wnba",
     "NHL": "icehockey_nhl",
-    "MLB": "baseball_mlb"
+    "MLB": "baseball_mlb",
+    "French Open": "tennis_fr_open"  # Added French Open
 }
 
 # --- CACHED API FETCHING ---
@@ -130,7 +131,7 @@ def run_promo_scan(p):
                                 mc = 0.65
                                 raw_h = (p['wager'] * (sm + (1 - mc))) / (hm + 1)
 
-                            # Exact calculations (no rounding to .25 or flat dollar amounts)
+                            # Exact calculations
                             if p['strat'] == "Profit Boost (%)":
                                 bsm = sm * (1 + (p['val']/100))
                                 exact_profit = min(((p['wager'] * bsm) - raw_h), ((raw_h * hm) - p['wager']))
