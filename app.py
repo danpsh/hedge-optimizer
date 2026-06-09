@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import requests
 from datetime import datetime, timezone, timedelta
@@ -115,7 +116,6 @@ def run_promo_scan(p):
                     if not source_odds or not hedge_odds: continue
 
                     for s in source_odds:
-                        # Grab all unique outcomes inside this game's market to check if it's 2-way or 3-way
                         all_outcomes = list(set([o['team'] for o in game['bookmakers'][0]['markets'][0]['outcomes']]))
                         hedge_teams = [t for t in all_outcomes if t != s['team']]
                         
@@ -156,7 +156,6 @@ def run_promo_scan(p):
                                         "h1_book": best_h1['book'], "h1_team": best_h1['team'], "h1_price": best_h1['price'], "exact_hedge1": raw_h1,
                                         "h2_book": best_h2['book'], "h2_team": best_h2['team'], "h2_price": best_h2['price'], "exact_hedge2": raw_h2,
                                     })
-                            # Keep 3-way limited to profit boosts for now based on formula requests
                             else:
                                 continue
 
@@ -178,7 +177,7 @@ def run_promo_scan(p):
                                 elif p['strat'] == "Bonus Bet":
                                     raw_h = (p['wager'] * sm) / (1 + hm)
                                     exact_profit = min(((p['wager'] * sm) - raw_h), (raw_h * hm))
-                                else: # No-Sweat
+                                else: 
                                     mc = 0.65
                                     raw_h = (p['wager'] * (sm + (1 - mc))) / (hm + 1)
                                     exact_profit = min(((p['wager'] * sm) - raw_h), ((raw_h * hm) + (p['wager'] * 0.65) - p['wager']))
@@ -222,7 +221,6 @@ def display_results(all_opps, p):
             with st.expander(header_title):
                 st.write(f"**Full Match Details:** {op['sport']} | {op['game']} | Start Time: {op['time']}")
                 
-                # Dynamic UI Layout for Soccer (3 Hedges Side-by-Side)
                 if op.get('market_type') == "3-way":
                     c_main, c_hedge1, c_hedge2 = st.columns([1.2, 1.2, 1.2])
                     with c_main:
@@ -236,7 +234,6 @@ def display_results(all_opps, p):
                         st.success(f"Bet **${op['exact_hedge2']:.2f}** on **{op['h2_team']}** @ **{op['h2_price']:+}**")
                         st.metric("Optimal Profit", f"${op['exact_profit']:.2f}")
                 
-                # Dynamic UI Layout for Standard US Sports (2 Hedges)
                 else:
                     c_main, c_hedge = st.columns([1.5, 2])
                     with c_main:
