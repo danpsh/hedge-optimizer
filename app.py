@@ -318,5 +318,3 @@ if st.session_state.promos:
         if st.button("Clear Cache", use_container_width=True):
             st.cache_data.clear()
             st.toast("Cache cleared!")
-
-```
