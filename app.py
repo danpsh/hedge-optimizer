@@ -115,7 +115,8 @@ def run_promo_scan(p):
                     if not source_odds or not hedge_odds: continue
 
                     for s in source_odds:
-                        all_outcomes = list(set([o['team'] for o in game['bookmakers'][0]['markets'][0]['outcomes']]))
+                        # FIXED: Changed o['team'] to o['name'] to map correctly to the API structural key
+                        all_outcomes = list(set([o['name'] for o in game['bookmakers'][0]['markets'][0]['outcomes']]))
                         hedge_teams = [t for t in all_outcomes if t != s['team']]
                         
                         # ----------------------------------------------------
