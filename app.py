@@ -1,8 +1,3 @@
-Here is the complete, production-ready Streamlit code.
-
-It integrates the 3-way market logic seamlessly alongside your original 2-way market features, meaning it will scan NBA, MLB, and NHL normally using 2-way math, but will automatically switch to the 3-way formula and layout when scanning the World Cup or soccer leagues.
-
-```python
 import streamlit as st
 import requests
 from datetime import datetime, timezone, timedelta
