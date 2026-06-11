@@ -58,7 +58,8 @@ sports_map = {
     "NHL": "icehockey_nhl",
     "MLB": "baseball_mlb",
     "FIFA World Cup": "soccer_fifa_world_cup",
-    "EPL": "soccer_epl"
+    "EPL": "soccer_epl",
+    "UFC": "mma_mixed_martial_arts"  # Added UFC Support
 }
 
 # --- CACHED API FETCHING ---
@@ -145,7 +146,7 @@ def run_promo_scan(p):
                                 
                                 if exact_profit > -10.0:
                                     all_opps.append({
-                                        "game": f"{game['away_team']} vs {game['home_team']}",
+                                        "game": f"{game.get('away_team', 'Fighter 1')} vs {game.get('home_team', 'Fighter 2')}",
                                         "sport": sport_label,
                                         "market_type": "3-way",
                                         "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
@@ -160,7 +161,7 @@ def run_promo_scan(p):
                                 continue
 
                         # ----------------------------------------------------
-                        # CASE 2: STANDARD 2-WAY MARKET (NBA, MLB, NHL)
+                        # CASE 2: STANDARD 2-WAY MARKET (NBA, MLB, NHL, UFC)
                         # ----------------------------------------------------
                         elif len(all_outcomes) == 2 and len(hedge_teams) == 1:
                             opp_team = hedge_teams[0]
@@ -184,7 +185,7 @@ def run_promo_scan(p):
 
                                 if exact_profit > -10.0:
                                     all_opps.append({
-                                        "game": f"{game['away_team']} vs {game['home_team']}",
+                                        "game": f"{game.get('away_team', 'Fighter 1')} vs {game.get('home_team', 'Fighter 2')}",
                                         "sport": sport_label,
                                         "market_type": "2-way",
                                         "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
