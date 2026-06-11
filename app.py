@@ -59,7 +59,7 @@ sports_map = {
     "MLB": "baseball_mlb",
     "FIFA World Cup": "soccer_fifa_world_cup",
     "EPL": "soccer_epl",
-    "UFC": "mma_mixed_martial_arts"  # Added UFC Support
+    "UFC": "mma_mixed_martial_arts"
 }
 
 # --- CACHED API FETCHING ---
@@ -116,9 +116,10 @@ def run_promo_scan(p):
                     if not source_odds or not hedge_odds: continue
 
                     for s in source_odds:
-                        # FIXED: Changed o['team'] to o['name'] to map correctly to the API structural key
                         all_outcomes = list(set([o['name'] for o in game['bookmakers'][0]['markets'][0]['outcomes']]))
                         hedge_teams = [t for t in all_outcomes if t != s['team']]
+                        
+                        sm = get_multiplier(s['price'])
                         
                         # ----------------------------------------------------
                         # CASE 1: SOCCER / 3-WAY MARKET (Home, Away, Draw)
@@ -134,31 +135,42 @@ def run_promo_scan(p):
                             best_h1 = max(eligible_h1, key=lambda x: x['price'])
                             best_h2 = max(eligible_h2, key=lambda x: x['price'])
                             
-                            sm = get_multiplier(s['price'])
                             hm1 = get_multiplier(best_h1['price'])
                             hm2 = get_multiplier(best_h2['price'])
                             
                             if p['strat'] == "Profit Boost (%)":
                                 bsm = sm * (1 + (p['val']/100))
-                                raw_h1 = (p['wager'] * (1 + bsm)) / (1 + hm1 + ((1 + hm1) / (1 + hm2)))
-                                raw_h2 = (raw_h1 * (1 + hm1)) / (1 + hm2)
-                                exact_profit = (raw_h1 * hm1) - p['wager'] - raw_h2
+                                target_payout = p['wager'] * (1 + bsm)
+                                raw_h1 = target_payout / (1 + hm1)
+                                raw_h2 = target_payout / (1 + hm2)
+                                exact_profit = target_payout - p['wager'] - raw_h1 - raw_h2
                                 
-                                if exact_profit > -10.0:
-                                    all_opps.append({
-                                        "game": f"{game.get('away_team', 'Fighter 1')} vs {game.get('home_team', 'Fighter 2')}",
-                                        "sport": sport_label,
-                                        "market_type": "3-way",
-                                        "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
-                                        "exact_profit": exact_profit,
-                                        "wager": p['wager'],
-                                        "strat": p['strat'],
-                                        "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
-                                        "h1_book": best_h1['book'], "h1_team": best_h1['team'], "h1_price": best_h1['price'], "exact_hedge1": raw_h1,
-                                        "h2_book": best_h2['book'], "h2_team": best_h2['team'], "h2_price": best_h2['price'], "exact_hedge2": raw_h2,
-                                    })
-                            else:
-                                continue
+                            elif p['strat'] == "Bonus Bet":
+                                target_payout = p['wager'] * sm
+                                raw_h1 = target_payout / (1 + hm1)
+                                raw_h2 = target_payout / (1 + hm2)
+                                exact_profit = target_payout - raw_h1 - raw_h2
+                                
+                            else:  # No-Sweat Bet
+                                mc = 0.65
+                                target_payout = p['wager'] * (1 + sm)
+                                raw_h1 = (target_payout - (p['wager'] * mc)) / (1 + hm1)
+                                raw_h2 = (target_payout - (p['wager'] * mc)) / (1 + hm2)
+                                exact_profit = target_payout - p['wager'] - raw_h1 - raw_h2
+
+                            if exact_profit > -10.0:
+                                all_opps.append({
+                                    "game": f"{game.get('away_team', 'Fighter 1')} vs {game.get('home_team', 'Fighter 2')}",
+                                    "sport": sport_label,
+                                    "market_type": "3-way",
+                                    "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
+                                    "exact_profit": exact_profit,
+                                    "wager": p['wager'],
+                                    "strat": p['strat'],
+                                    "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
+                                    "h1_book": best_h1['book'], "h1_team": best_h1['team'], "h1_price": best_h1['price'], "exact_hedge1": raw_h1,
+                                    "h2_book": best_h2['book'], "h2_team": best_h2['team'], "h2_price": best_h2['price'], "exact_hedge2": raw_h2,
+                                })
 
                         # ----------------------------------------------------
                         # CASE 2: STANDARD 2-WAY MARKET (NBA, MLB, NHL, UFC)
@@ -169,19 +181,24 @@ def run_promo_scan(p):
                             
                             if eligible:
                                 best_h = max(eligible, key=lambda x: x['price'])
-                                sm, hm = get_multiplier(s['price']), get_multiplier(best_h['price'])
+                                hm = get_multiplier(best_h['price'])
                                 
                                 if p['strat'] == "Profit Boost (%)":
                                     bsm = sm * (1 + (p['val']/100))
-                                    raw_h = (p['wager'] * (1 + bsm)) / (1 + hm)
-                                    exact_profit = min(((p['wager'] * bsm) - raw_h), ((raw_h * hm) - p['wager']))
+                                    target_payout = p['wager'] * (1 + bsm)
+                                    raw_h = target_payout / (1 + hm)
+                                    exact_profit = target_payout - p['wager'] - raw_h
+                                    
                                 elif p['strat'] == "Bonus Bet":
-                                    raw_h = (p['wager'] * sm) / (1 + hm)
-                                    exact_profit = min(((p['wager'] * sm) - raw_h), (raw_h * hm))
-                                else: 
+                                    target_payout = p['wager'] * sm
+                                    raw_h = target_payout / (1 + hm)
+                                    exact_profit = target_payout - raw_h
+                                    
+                                else:  # No-Sweat Bet
                                     mc = 0.65
-                                    raw_h = (p['wager'] * (sm + (1 - mc))) / (hm + 1)
-                                    exact_profit = min(((p['wager'] * sm) - raw_h), ((raw_h * hm) + (p['wager'] * 0.65) - p['wager']))
+                                    target_payout = p['wager'] * (1 + sm)
+                                    raw_h = (target_payout - (p['wager'] * mc)) / (1 + hm)
+                                    exact_profit = target_payout - p['wager'] - raw_h
 
                                 if exact_profit > -10.0:
                                     all_opps.append({
