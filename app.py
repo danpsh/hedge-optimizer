@@ -53,12 +53,10 @@ book_map = {
 
 # --- ACTIVE SPORTS ---
 sports_map = {
-    "NBA": "basketball_nba",
     "WNBA": "basketball_wnba",
     "NHL": "icehockey_nhl",
     "MLB": "baseball_mlb",
     "FIFA World Cup": "soccer_fifa_world_cup",
-    "EPL": "soccer_epl",
     "UFC": "mma_mixed_martial_arts"
 }
 
@@ -173,7 +171,7 @@ def run_promo_scan(p):
                                 })
 
                         # ----------------------------------------------------
-                        # CASE 2: STANDARD 2-WAY MARKET (NBA, MLB, NHL, UFC)
+                        # CASE 2: STANDARD 2-WAY MARKET (WNBA, MLB, NHL, UFC)
                         # ----------------------------------------------------
                         elif len(all_outcomes) == 2 and len(hedge_teams) == 1:
                             opp_team = hedge_teams[0]
