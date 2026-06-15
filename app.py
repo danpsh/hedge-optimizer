@@ -86,8 +86,8 @@ def run_promo_scan(p):
     source_book_key = book_map[p['book']]
     now_utc = datetime.now(timezone.utc)
     
-    # --- LOOKAHEAD SET TO 2 DAYS ---
-    lookahead_limit = now_utc + timedelta(days=2)
+    # --- LOOKAHEAD SET TO 5 DAYS ---
+    lookahead_limit = now_utc + timedelta(days=5)
     all_opps = []
     
     with st.status(f"Scanning {p['book']}...", expanded=False) as status:
