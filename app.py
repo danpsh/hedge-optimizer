@@ -79,9 +79,9 @@ def fetch_odds(sport_key):
 # --- SCAN ENGINE ---
 def run_promo_scan(p):
     if not p['hedge_books']:
-        allowed_hedge_keys = [v for k, v in book_map.items() if k != p['book']]
+        allowed_hedge_keys = [v for k, v in book_map.items() if v != book_map[p['book']]]
     else:
-        allowed_hedge_keys = [book_map[b] for b in p['hedge_books']]
+        allowed_hedge_keys = [book_map[b] for b in p['hedge_books'] if book_map[b] != book_map[p['book']]]
 
     source_book_key = book_map[p['book']]
     now_utc = datetime.now(timezone.utc)
@@ -107,7 +107,7 @@ def run_promo_scan(p):
                         if bm['key'] == source_book_key or bm['key'] in allowed_hedge_keys:
                             outcomes = bm['markets'][0]['outcomes']
                             for o in outcomes:
-                                entry = {'book': bm['title'], 'team': o['name'], 'price': o['price']}
+                                entry = {'book_key': bm['key'], 'book': bm['title'], 'team': o['name'], 'price': o['price']}
                                 if bm['key'] == source_book_key: 
                                     source_odds.append(entry)
                                 elif bm['key'] in allowed_hedge_keys: 
@@ -115,16 +115,18 @@ def run_promo_scan(p):
                     
                     if not source_odds or not hedge_odds: continue
 
-                    for s in source_odds:
-                        all_outcomes = list(set([o['name'] for o in game['bookmakers'][0]['markets'][0]['outcomes']]))
-                        hedge_teams = [t for t in all_outcomes if t != s['team']]
-                        
-                        sm = get_multiplier(s['price'])
-                        
-                        # ----------------------------------------------------
-                        # CASE 1: SOCCER / 3-WAY MARKET (Home, Away, Draw)
-                        # ----------------------------------------------------
-                        if len(all_outcomes) == 3 and len(hedge_teams) == 2:
+                    # Dynamically inspect actual outcome count available
+                    sample_market = game['bookmakers'][0]['markets'][0]['outcomes']
+                    all_outcomes = list(set([o['name'] for o in sample_market]))
+
+                    # ----------------------------------------------------
+                    # CASE 1: SOCCER / 3-WAY MARKET (Different Books for All 3)
+                    # ----------------------------------------------------
+                    if len(all_outcomes) == 3:
+                        for s in source_odds:
+                            hedge_teams = [t for t in all_outcomes if t != s['team']]
+                            if len(hedge_teams) != 2: continue
+                            
                             team_h1, team_h2 = hedge_teams[0], hedge_teams[1]
                             
                             eligible_h1 = [h for h in hedge_odds if h['team'] == team_h1]
@@ -132,55 +134,77 @@ def run_promo_scan(p):
                             
                             if not eligible_h1 or not eligible_h2: continue
                             
-                            best_h1 = max(eligible_h1, key=lambda x: x['price'])
-                            best_h2 = max(eligible_h2, key=lambda x: x['price'])
-                            
-                            hm1 = get_multiplier(best_h1['price'])
-                            hm2 = get_multiplier(best_h2['price'])
-                            
-                            if p['strat'] == "Profit Boost (%)":
-                                bsm = sm * (1 + (p['val']/100))
-                                target_payout = p['wager'] * (1 + bsm)
-                                raw_h1 = target_payout / (1 + hm1)
-                                raw_h2 = target_payout / (1 + hm2)
-                                exact_profit = target_payout - p['wager'] - raw_h1 - raw_h2
-                                
-                            elif p['strat'] == "Bonus Bet":
-                                target_payout = p['wager'] * sm
-                                raw_h1 = target_payout / (1 + hm1)
-                                raw_h2 = target_payout / (1 + hm2)
-                                exact_profit = target_payout - raw_h1 - raw_h2
-                                
-                            else:  # No-Sweat Bet
-                                mc = 0.65
-                                target_payout = p['wager'] * (1 + sm)
-                                raw_h1 = (target_payout - (p['wager'] * mc)) / (1 + hm1)
-                                raw_h2 = (target_payout - (p['wager'] * mc)) / (1 + hm2)
-                                exact_profit = target_payout - p['wager'] - raw_h1 - raw_h2
+                            # Find the absolute best unique pair where h1_book != h2_book
+                            best_combination = None
+                            max_profit_for_combo = -999999
 
-                            if exact_profit > -10.0:
+                            for h1 in eligible_h1:
+                                for h2 in eligible_h2:
+                                    # STRIKT REQUIREMENT: Books must be different from each other
+                                    if h1['book_key'] == h2['book_key']:
+                                        continue
+                                    
+                                    sm = get_multiplier(s['price'])
+                                    hm1 = get_multiplier(h1['price'])
+                                    hm2 = get_multiplier(h2['price'])
+
+                                    if p['strat'] == "Profit Boost (%)":
+                                        bsm = sm * (1 + (p['val']/100))
+                                        target_payout = p['wager'] * (1 + bsm)
+                                        raw_h1 = target_payout / (1 + hm1)
+                                        raw_h2 = target_payout / (1 + hm2)
+                                        exact_profit = target_payout - p['wager'] - raw_h1 - raw_h2
+                                        
+                                    elif p['strat'] == "Bonus Bet":
+                                        target_payout = p['wager'] * sm
+                                        raw_h1 = target_payout / (1 + hm1)
+                                        raw_h2 = target_payout / (1 + hm2)
+                                        exact_profit = target_payout - raw_h1 - raw_h2
+                                        
+                                    else:  # No-Sweat Bet
+                                        mc = 0.65
+                                        target_payout = p['wager'] * (1 + sm)
+                                        raw_h1 = (target_payout - (p['wager'] * mc)) / (1 + hm1)
+                                        raw_h2 = (target_payout - (p['wager'] * mc)) / (1 + hm2)
+                                        exact_profit = target_payout - p['wager'] - raw_h1 - raw_h2
+
+                                    if exact_profit > max_profit_for_combo:
+                                        max_profit_for_combo = exact_profit
+                                        best_combination = {
+                                            "h1": h1, "h2": h2, 
+                                            "raw_h1": raw_h1, "raw_h2": raw_h2, 
+                                            "profit": exact_profit
+                                        }
+
+                            if best_combination and best_combination['profit'] > -10.0:
+                                b_combo = best_combination
                                 all_opps.append({
-                                    "game": f"{game.get('away_team', 'Fighter 1')} vs {game.get('home_team', 'Fighter 2')}",
+                                    "game": f"{game.get('away_team', 'Away Team')} vs {game.get('home_team', 'Home Team')}",
                                     "sport": sport_label,
                                     "market_type": "3-way",
                                     "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
-                                    "exact_profit": exact_profit,
+                                    "exact_profit": b_combo['profit'],
                                     "wager": p['wager'],
                                     "strat": p['strat'],
                                     "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
-                                    "h1_book": best_h1['book'], "h1_team": best_h1['team'], "h1_price": best_h1['price'], "exact_hedge1": raw_h1,
-                                    "h2_book": best_h2['book'], "h2_team": best_h2['team'], "h2_price": best_h2['price'], "exact_hedge2": raw_h2,
+                                    "h1_book": b_combo['h1']['book'], "h1_team": b_combo['h1']['team'], "h1_price": b_combo['h1']['price'], "exact_hedge1": b_combo['raw_h1'],
+                                    "h2_book": b_combo['h2']['book'], "h2_team": b_combo['h2']['team'], "h2_price": b_combo['h2']['price'], "exact_hedge2": b_combo['raw_h2'],
                                 })
 
-                        # ----------------------------------------------------
-                        # CASE 2: STANDARD 2-WAY MARKET (WNBA, MLB, NHL, UFC)
-                        # ----------------------------------------------------
-                        elif len(all_outcomes) == 2 and len(hedge_teams) == 1:
+                    # ----------------------------------------------------
+                    # CASE 2: STANDARD 2-WAY MARKET (WNBA, MLB, NHL, UFC)
+                    # ----------------------------------------------------
+                    elif len(all_outcomes) == 2:
+                        for s in source_odds:
+                            hedge_teams = [t for t in all_outcomes if t != s['team']]
+                            if len(hedge_teams) != 1: continue
                             opp_team = hedge_teams[0]
+                            
                             eligible = [h for h in hedge_odds if h['team'] == opp_team]
                             
                             if eligible:
                                 best_h = max(eligible, key=lambda x: x['price'])
+                                sm = get_multiplier(s['price'])
                                 hm = get_multiplier(best_h['price'])
                                 
                                 if p['strat'] == "Profit Boost (%)":
@@ -202,7 +226,7 @@ def run_promo_scan(p):
 
                                 if exact_profit > -10.0:
                                     all_opps.append({
-                                        "game": f"{game.get('away_team', 'Fighter 1')} vs {game.get('home_team', 'Fighter 2')}",
+                                        "game": f"{game.get('away_team', 'Away Team')} vs {game.get('home_team', 'Home Team')}",
                                         "sport": sport_label,
                                         "market_type": "2-way",
                                         "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
