@@ -51,6 +51,25 @@ st.markdown("""
         margin-bottom: 10px;
         border-left: 5px solid #16a34a;
     }
+
+    /* --- MAIN BOOST FORM: CONTROL-GROUP CARDS --- */
+    /* Stretch the form's column row so cards can share an equal height */
+    div[data-testid="stForm"] div[data-testid="stHorizontalBlock"] {
+        align-items: stretch;
+    }
+    /* Card styling for each st.container(border=True) inside a form */
+    div[data-testid="stForm"] div[data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        height: 100%;
+        padding: 0.6rem 0.8rem !important;
+    }
+    /* Tighter/denser spacing between the controls inside each card */
+    div[data-testid="stForm"] div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlock"] {
+        gap: 0.4rem !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -95,10 +114,6 @@ def run_promo_scan(p):
         allowed_hedge_keys = [v for k, v in book_map.items() if v != book_map[p['book']]]
     else:
         allowed_hedge_keys = [book_map[b] for b in p['hedge_books'] if book_map[b] != book_map[p['book']]]
-
-    # Force inclusion of DraftKings as a hedge book option if it's not the primary promo book
-    if book_map["DraftKings"] != book_map[p['book']] and book_map["DraftKings"] not in allowed_hedge_keys:
-        allowed_hedge_keys.append(book_map["DraftKings"])
 
     source_book_key = book_map[p['book']]
     now_utc = datetime.now(timezone.utc)
@@ -255,6 +270,7 @@ def run_multi_book_soccer_scan(sc):
     soccer_opps = []
 
     with st.status("Parsing complex tri-booster 3-Way line structures...", expanded=False) as status:
+        # Evaluate checked sports arrays passed from backend parameters
         for league_label in sc['leagues']:
             sport_key = sports_map[league_label]
             games, remaining = fetch_odds(sport_key)
@@ -301,7 +317,7 @@ def run_multi_book_soccer_scan(sc):
                                 if sc['strat1'] == "Bonus Bet":
                                     target_pay = (w1_promo * m1_boosted) + (w1_cash * (1 + m1_raw))
                                     outlay1 = w1_cash
-                                else: 
+                                else: # Straight Cash or Profit Boost / No-Sweat
                                     target_pay = (w1_promo * (1 + m1_boosted)) + (w1_cash * (1 + m1_raw))
                                     outlay1 = w1_total
 
@@ -382,6 +398,7 @@ def run_bet_get_scan(bg):
     tomorrow_date = today_date + timedelta(days=1)
     
     bg_opps = []
+
     projected_bonus_value = bg['bonus_val'] * 0.70
 
     with st.status(f"Hunting cheapest qualification routes for {bg['book']}...", expanded=False) as status:
@@ -485,15 +502,8 @@ def display_results(all_opps, p):
                     with c3: st.success(f"**{op['h2_book'].upper()}**\n\nStake: **${op['exact_hedge2']:.2f}**\n\nLine: **{op['h2_team']}** @ **{op['h2_price']:+}**")
                 else:
                     c_main, c_hedge = st.columns([1.5, 2])
-                    # Column 1 Layout (Primary)
-                    with c_main: 
-                        st.info(f"**{op['s_book'].upper()}**\n\nStake: **${op['wager']:.2f}**\n\nLine: **{op['s_team']}** @ **{op['s_price']:+}**")
-                    # Column 2 Layout (Hedge) - Relocated Boost Value Underneath Wager Amount
-                    with c_hedge: 
-                        st.success(f"**{op['h_book'].upper()}**\n\nStake: **${op['exact_hedge']:.2f}**\n\nLine: **{op['h_team']}** @ **{op['h_price']:+}**")
-                        if op.get('used_boost', 0) > 0:
-                            st.caption(f"⚡ Applied Promo Boost: **{op['used_boost']}%**")
-                            
+                    with c_main: st.info(f"**{op['s_book'].upper()}**\n\nStake: **${op['wager']:.2f}**\n\nLine: **{op['s_team']}** @ **{op['s_price']:+}**")
+                    with c_hedge: st.success(f"**{op['h_book'].upper()}**\n\nStake: **${op['exact_hedge']:.2f}**\n\nLine: **{op['h_team']}** @ **{op['h_price']:+}**")
                 st.metric("Net Arbitrage Profit", f"${op['exact_profit']:.2f}")
 
 def display_soccer_results(opps):
@@ -562,3 +572,121 @@ with c_quota:
     st.metric("API Quota Remaining", st.session_state.api_quota)
 
 st.divider()
+
+# --- INITIALIZE STATE QUEUES ---
+if 'promos' not in st.session_state: st.session_state.promos = []
+
+# ========================================================
+# TOP MODULE: MAIN BOOST ENGINE
+# ========================================================
+with st.expander("Main Boost Engine", expanded=True):
+    with st.form("promo_form", clear_on_submit=False):
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+        with col1:
+            with st.container(border=True):
+                b = st.selectbox("Source Book", list(book_map.keys()))
+                s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
+        with col2:
+            with st.container(border=True):
+                w = st.number_input("Wager Amount ($)", min_value=0.0, value=0.0, step=5.0)
+                main_boost_val = st.number_input("Boost Value (%)", min_value=0, value=0, step=5, help="Only applies if Promo Type is set to Profit Boost (%)", disabled=(s != "Profit Boost (%)"))
+        with col3:
+            with st.container(border=True):
+                hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
+        with col4:
+            with st.container(border=True):
+                sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[], placeholder="Select sports...")
+        
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            promo_submit = st.form_submit_button("Execute Scan")
+        with btn_col2:
+            add_queue = st.form_submit_button("Add to Multi-Run Queue")
+
+    if promo_submit:
+        active_sports = sp if sp else list(sports_map.keys())
+        p_config = {"book": b, "strat": s, "boost_val": main_boost_val, "wager": w, "hedge_books": hb, "sports": active_sports}
+        results = run_promo_scan(p_config)
+        display_results(results, p_config)
+
+# ========================================================
+# LOWER MODULE: SOCCER MULTI-BOOK COMPLEX GRID (3-WAY)
+# ========================================================
+with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=False):
+    ALL_SOCCER_LEAGUES = ["FIFA World Cup"] # Expandable master listing matching backend targets
+    
+    if "soccer_leagues_sel" not in st.session_state:
+        st.session_state["soccer_leagues_sel"] = ["FIFA World Cup"]
+
+    # Select All Row Setup Split
+    col_soc_sel, col_soc_btn = st.columns([4, 1])
+    with col_soc_sel:
+        selected_leagues = st.multiselect(
+            "Filter Tournaments / Leagues", 
+            options=ALL_SOCCER_LEAGUES, 
+            key="soccer_leagues_sel",
+            help="Select specific tournament lines to process inside the complex 3-way matrix."
+        )
+    with col_soc_btn:
+        st.write("") 
+        st.write("")
+        if st.button("Select All Leagues", use_container_width=True):
+            st.session_state["soccer_leagues_sel"] = ALL_SOCCER_LEAGUES
+            st.rerun()
+
+    with st.form("soccer_form"):
+        st.caption("⏳ **Look-Ahead Active:** Processing restricted strictly to Today's and Tomorrow's matches.")
+        st.divider()
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            st.subheader("Leg 1 (Outcome A)")
+            sb1 = st.selectbox("Book Leg 1", list(book_map.keys()), index=0)
+            ss1 = st.selectbox("Type Leg 1", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], index=0)
+            sbv1 = st.number_input("Boost % Leg 1", min_value=0, value=0, step=5)
+            sw1 = st.number_input("Planned Stake Leg 1 ($)", min_value=0.0, value=50.0, step=5.0)
+            scap1 = st.number_input("Promo Cap Value Leg 1 ($)", min_value=0.0, value=0.0, help="0 means no cap")
+        with sc2:
+            st.subheader("Leg 2 (Outcome B)")
+            sb2 = st.selectbox("Book Leg 2", list(book_map.keys()), index=1)
+            ss2 = st.selectbox("Type Leg 2", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], index=0)
+            sbv2 = st.number_input("Boost % Leg 2", min_value=0, value=0, step=5)
+            scap2 = st.number_input("Promo Cap Value Leg 2 ($)", min_value=0.0, value=0.0)
+        with sc3:
+            st.subheader("Leg 3 (Draw)")
+            sb3 = st.selectbox("Book Leg 3", list(book_map.keys()), index=2)
+            ss3 = st.selectbox("Type Leg 3", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], index=0)
+            sbv3 = st.number_input("Boost % Leg 3", min_value=0, value=0, step=5)
+            scap3 = st.number_input("Promo Cap Value Leg 3 ($)", min_value=0.0, value=0.0)
+            
+        soccer_submit = st.form_submit_button("Optimize Complex Soccer Matrix")
+        
+    if soccer_submit:
+        active_leagues = selected_leagues if selected_leagues else ALL_SOCCER_LEAGUES
+        soccer_config = {
+            "book1": sb1, "strat1": ss1, "boost1": sbv1, "wager1": sw1, "cap1_val": scap1,
+            "book2": sb2, "strat2": ss2, "boost2": sbv2, "cap2_val": scap2,
+            "book3": sb3, "strat3": ss3, "boost3": sbv3, "cap3_val": scap3,
+            "leagues": active_leagues
+        }
+        soccer_results = run_multi_book_soccer_scan(soccer_config)
+        display_soccer_results(soccer_results)
+
+# ========================================================
+# BOTTOM MODULE: DEDICATED BET & GET QUALIFIER
+# ========================================================
+with st.expander("Dedicated Bet & Get Qualifier Path Finder", expanded=False):
+    with st.form("bet_get_form"):
+        bgc1, bgc2 = st.columns(2)
+        with bgc1:
+            bg_b = st.selectbox("Target Qualifier Book", list(book_map.keys()))
+            bg_w = st.number_input("Required Qualification Stake ($)", min_value=0.0, value=10.0, step=5.0)
+        with bgc2:
+            bg_v = st.number_input("Returned Bonus Value Amount ($)", min_value=0.0, value=5.0, step=5.0)
+            bg_sp = st.multiselect("Market Asset Pool Filter", list(sports_map.keys()), default=list(sports_map.keys()))
+            
+        bg_submit = st.form_submit_button("Locate Qualification Baselines")
+        
+    if bg_submit:
+        bg_config = {"book": bg_b, "wager": bg_w, "bonus_val": bg_v, "sports": bg_sp}
+        bg_results = run_bet_get_scan(bg_config)
+        display_bet_get_results(bg_results, bg_config)
