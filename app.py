@@ -98,7 +98,11 @@ def run_promo_scan(p):
 
     source_book_key = book_map[p['book']]
     now_utc = datetime.now(timezone.utc)
-    lookahead_limit = now_utc + timedelta(days=5)
+    
+    # Restrict window dynamically to today and tomorrow
+    today_date = datetime.now().date()
+    tomorrow_date = today_date + timedelta(days=1)
+    
     all_opps = []
     
     with st.status(f"Scanning {p['book']}...", expanded=False) as status:
@@ -110,7 +114,10 @@ def run_promo_scan(p):
                 st.session_state.api_quota = remaining
                 for game in games:
                     commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                    if commence_time <= now_utc or commence_time > lookahead_limit:
+                    game_date_local = (commence_time - timedelta(hours=6)).date()
+                    
+                    # Strict target check
+                    if game_date_local not in [today_date, tomorrow_date]:
                         continue
 
                     flat_odds = []
@@ -236,118 +243,127 @@ def run_multi_book_soccer_scan(sc):
     allowed_keys = list(book_map.values())
     
     now_utc = datetime.now(timezone.utc)
-    lookahead_limit = now_utc + timedelta(days=5)
+    
+    # Restrict window dynamically to today and tomorrow
+    today_date = datetime.now().date()
+    tomorrow_date = today_date + timedelta(days=1)
+    
     soccer_opps = []
 
     with st.status("Parsing complex tri-booster 3-Way line structures...", expanded=False) as status:
-        sport_key = sports_map["FIFA World Cup"]
-        games, remaining = fetch_odds(sport_key)
-        if games:
-            st.session_state.api_quota = remaining
-            for game in games:
-                commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                if commence_time <= now_utc or commence_time > lookahead_limit: continue
+        # Evaluate checked sports arrays passed from backend parameters
+        for league_label in sc['leagues']:
+            sport_key = sports_map[league_label]
+            games, remaining = fetch_odds(sport_key)
+            if games:
+                st.session_state.api_quota = remaining
+                for game in games:
+                    commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                    game_date_local = (commence_time - timedelta(hours=6)).date()
+                    
+                    if game_date_local not in [today_date, tomorrow_date]: 
+                        continue
 
-                flat_odds = []
-                for bm in game['bookmakers']:
-                    if bm['key'] in allowed_keys:
-                        for o in bm['markets'][0]['outcomes']:
-                            flat_odds.append({'book_key': bm['key'], 'book_title': bm['title'], 'team': o['name'], 'price': o['price']})
+                    flat_odds = []
+                    for bm in game['bookmakers']:
+                        if bm['key'] in allowed_keys:
+                            for o in bm['markets'][0]['outcomes']:
+                                flat_odds.append({'book_key': bm['key'], 'book_title': bm['title'], 'team': o['name'], 'price': o['price']})
 
-                unique_outcomes = list(set([o['team'] for o in flat_odds]))
-                if len(unique_outcomes) != 3: continue
+                    unique_outcomes = list(set([o['team'] for o in flat_odds]))
+                    if len(unique_outcomes) != 3: continue
 
-                t1, t2, draw = unique_outcomes[0], unique_outcomes[1], unique_outcomes[2]
-                odds_t1 = [o for o in flat_odds if o['team'] == t1]
-                odds_t2 = [o for o in flat_odds if o['team'] == t2]
-                odds_draw = [o for o in flat_odds if o['team'] == draw]
+                    t1, t2, draw = unique_outcomes[0], unique_outcomes[1], unique_outcomes[2]
+                    odds_t1 = [o for o in flat_odds if o['team'] == t1]
+                    odds_t2 = [o for o in flat_odds if o['team'] == t2]
+                    odds_draw = [o for o in flat_odds if o['team'] == draw]
 
-                for o1 in odds_t1:
-                    for o2 in odds_t2:
-                        for o3 in odds_draw:
-                            if o1['book_key'] == o2['book_key'] or o1['book_key'] == o3['book_key'] or o2['book_key'] == o3['book_key']: continue
-                            if o1['book_key'] != book1_key or o2['book_key'] != book2_key or o3['book_key'] != book3_key: continue
+                    for o1 in odds_t1:
+                        for o2 in odds_t2:
+                            for o3 in odds_draw:
+                                if o1['book_key'] == o2['book_key'] or o1['book_key'] == o3['book_key'] or o2['book_key'] == o3['book_key']: continue
+                                if o1['book_key'] != book1_key or o2['book_key'] != book2_key or o3['book_key'] != book3_key: continue
 
-                            # --- LEG 1 PROMO PROCESSING ---
-                            w1_total = sc['wager1']
-                            w1_promo = w1_total
-                            w1_cash = 0.0
-                            if sc['strat1'] != "Straight Cash" and sc['cap1_val'] > 0 and w1_total > sc['cap1_val']:
-                                w1_promo = sc['cap1_val']
-                                w1_cash = w1_total - w1_promo
+                                # --- LEG 1 PROMO PROCESSING ---
+                                w1_total = sc['wager1']
+                                w1_promo = w1_total
+                                w1_cash = 0.0
+                                if sc['strat1'] != "Straight Cash" and sc['cap1_val'] > 0 and w1_total > sc['cap1_val']:
+                                    w1_promo = sc['cap1_val']
+                                    w1_cash = w1_total - w1_promo
 
-                            m1_raw = get_multiplier(o1['price'])
-                            m1_boosted = m1_raw * (1 + (sc['boost1'] / 100)) if sc['strat1'] == "Profit Boost (%)" else m1_raw
+                                m1_raw = get_multiplier(o1['price'])
+                                m1_boosted = m1_raw * (1 + (sc['boost1'] / 100)) if sc['strat1'] == "Profit Boost (%)" else m1_raw
 
-                            if sc['strat1'] == "Bonus Bet":
-                                target_pay = (w1_promo * m1_boosted) + (w1_cash * (1 + m1_raw))
-                                outlay1 = w1_cash
-                            else: # Straight Cash or Profit Boost / No-Sweat
-                                target_pay = (w1_promo * (1 + m1_boosted)) + (w1_cash * (1 + m1_raw))
-                                outlay1 = w1_total
+                                if sc['strat1'] == "Bonus Bet":
+                                    target_pay = (w1_promo * m1_boosted) + (w1_cash * (1 + m1_raw))
+                                    outlay1 = w1_cash
+                                else: # Straight Cash or Profit Boost / No-Sweat
+                                    target_pay = (w1_promo * (1 + m1_boosted)) + (w1_cash * (1 + m1_raw))
+                                    outlay1 = w1_total
 
-                            # --- LEG 2 PROMO PROCESSING (WITH ARB SPLITTING) ---
-                            m2_raw = get_multiplier(o2['price'])
-                            m2_boosted = m2_raw * (1 + (sc['boost2'] / 100)) if sc['strat2'] == "Profit Boost (%)" else m2_raw
+                                # --- LEG 2 PROMO PROCESSING (WITH ARB SPLITTING) ---
+                                m2_raw = get_multiplier(o2['price'])
+                                m2_boosted = m2_raw * (1 + (sc['boost2'] / 100)) if sc['strat2'] == "Profit Boost (%)" else m2_raw
 
-                            div_promo2 = m2_boosted if sc['strat2'] == "Bonus Bet" else (1 + m2_boosted)
-                            div_cash2 = 1 + m2_raw
+                                div_promo2 = m2_boosted if sc['strat2'] == "Bonus Bet" else (1 + m2_boosted)
+                                div_cash2 = 1 + m2_raw
 
-                            if sc['strat2'] != "Straight Cash" and sc['cap2_val'] > 0:
-                                max_promo_payout2 = sc['cap2_val'] * div_promo2
-                                if target_pay > max_promo_payout2:
-                                    w2_promo = sc['cap2_val']
-                                    w2_cash = (target_pay - max_promo_payout2) / div_cash2
+                                if sc['strat2'] != "Straight Cash" and sc['cap2_val'] > 0:
+                                    max_promo_payout2 = sc['cap2_val'] * div_promo2
+                                    if target_pay > max_promo_payout2:
+                                        w2_promo = sc['cap2_val']
+                                        w2_cash = (target_pay - max_promo_payout2) / div_cash2
+                                    else:
+                                        w2_promo = target_pay / div_promo2
+                                        w2_cash = 0.0
                                 else:
-                                    w2_promo = target_pay / div_promo2
-                                    w2_cash = 0.0
-                            else:
-                                if sc['strat2'] == "Straight Cash":
-                                    w2_promo = 0.0
-                                    w2_cash = target_pay / div_cash2
+                                    if sc['strat2'] == "Straight Cash":
+                                        w2_promo = 0.0
+                                        w2_cash = target_pay / div_cash2
+                                    else:
+                                        w2_promo = target_pay / div_promo2
+                                        w2_cash = 0.0
+
+                                w2_total = w2_promo + w2_cash
+                                outlay2 = w2_cash if sc['strat2'] == "Bonus Bet" else w2_total
+
+                                # --- LEG 3 PROMO PROCESSING (WITH ARB SPLITTING) ---
+                                m3_raw = get_multiplier(o3['price'])
+                                m3_boosted = m3_raw * (1 + (sc['boost3'] / 100)) if sc['strat3'] == "Profit Boost (%)" else m3_raw
+
+                                div_promo3 = m3_boosted if sc['strat3'] == "Bonus Bet" else (1 + m3_boosted)
+                                div_cash3 = 1 + m3_raw
+
+                                if sc['strat3'] != "Straight Cash" and sc['cap3_val'] > 0:
+                                    max_promo_payout3 = sc['cap3_val'] * div_promo3
+                                    if target_pay > max_promo_payout3:
+                                        w3_promo = sc['cap3_val']
+                                        w3_cash = (target_pay - max_promo_payout3) / div_cash3
+                                    else:
+                                        w3_promo = target_pay / div_promo3
+                                        w3_cash = 0.0
                                 else:
-                                    w2_promo = target_pay / div_promo2
-                                    w2_cash = 0.0
+                                    if sc['strat3'] == "Straight Cash":
+                                        w3_promo = 0.0
+                                        w3_cash = target_pay / div_cash3
+                                    else:
+                                        w3_promo = target_pay / div_promo3
+                                        w3_cash = 0.0
 
-                            w2_total = w2_promo + w2_cash
-                            outlay2 = w2_cash if sc['strat2'] == "Bonus Bet" else w2_total
+                                w3_total = w3_promo + w3_cash
+                                outlay3 = w3_cash if sc['strat3'] == "Bonus Bet" else w3_total
 
-                            # --- LEG 3 PROMO PROCESSING (WITH ARB SPLITTING) ---
-                            m3_raw = get_multiplier(o3['price'])
-                            m3_boosted = m3_raw * (1 + (sc['boost3'] / 100)) if sc['strat3'] == "Profit Boost (%)" else m3_raw
+                                net_profit = target_pay - (outlay1 + outlay2 + outlay3)
 
-                            div_promo3 = m3_boosted if sc['strat3'] == "Bonus Bet" else (1 + m3_boosted)
-                            div_cash3 = 1 + m3_raw
-
-                            if sc['strat3'] != "Straight Cash" and sc['cap3_val'] > 0:
-                                max_promo_payout3 = sc['cap3_val'] * div_promo3
-                                if target_pay > max_promo_payout3:
-                                    w3_promo = sc['cap3_val']
-                                    w3_cash = (target_pay - max_promo_payout3) / div_cash3
-                                else:
-                                    w3_promo = target_pay / div_promo3
-                                    w3_cash = 0.0
-                            else:
-                                if sc['strat3'] == "Straight Cash":
-                                    w3_promo = 0.0
-                                    w3_cash = target_pay / div_cash3
-                                else:
-                                    w3_promo = target_pay / div_promo3
-                                    w3_cash = 0.0
-
-                            w3_total = w3_promo + w3_cash
-                            outlay3 = w3_cash if sc['strat3'] == "Bonus Bet" else w3_total
-
-                            net_profit = target_pay - (outlay1 + outlay2 + outlay3)
-
-                            soccer_opps.append({
-                                "game": f"{game.get('away_team')} vs {game.get('home_team')}",
-                                "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
-                                "net_profit": net_profit,
-                                "o1_book": o1['book_title'], "o1_team": o1['team'], "o1_price": o1['price'], "o1_wager": w1_total, "o1_promo": w1_promo, "o1_cash": w1_cash, "o1_strat": sc['strat1'], "o1_boost": sc['boost1'] if sc['strat1'] == "Profit Boost (%)" else 0,
-                                "o2_book": o2['book_title'], "o2_team": o2['team'], "o2_price": o2['price'], "o2_wager": w2_total, "o2_promo": w2_promo, "o2_cash": w2_cash, "o2_strat": sc['strat2'], "o2_boost": sc['boost2'] if sc['strat2'] == "Profit Boost (%)" else 0,
-                                "o3_book": o3['book_title'], "o3_team": o3['team'], "o3_price": o3['price'], "o3_wager": w3_total, "o3_promo": w3_promo, "o3_cash": w3_cash, "o3_strat": sc['strat3'], "o3_boost": sc['boost3'] if sc['strat3'] == "Profit Boost (%)" else 0
-                            })
+                                soccer_opps.append({
+                                    "game": f"{game.get('away_team')} vs {game.get('home_team')}",
+                                    "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
+                                    "net_profit": net_profit,
+                                    "o1_book": o1['book_title'], "o1_team": o1['team'], "o1_price": o1['price'], "o1_wager": w1_total, "o1_promo": w1_promo, "o1_cash": w1_cash, "o1_strat": sc['strat1'], "o1_boost": sc['boost1'] if sc['strat1'] == "Profit Boost (%)" else 0,
+                                    "o2_book": o2['book_title'], "o2_team": o2['team'], "o2_price": o2['price'], "o2_wager": w2_total, "o2_promo": w2_promo, "o2_cash": w2_cash, "o2_strat": sc['strat2'], "o2_boost": sc['boost2'] if sc['strat2'] == "Profit Boost (%)" else 0,
+                                    "o3_book": o3['book_title'], "o3_team": o3['team'], "o3_price": o3['price'], "o3_wager": w3_total, "o3_promo": w3_promo, "o3_cash": w3_cash, "o3_strat": sc['strat3'], "o3_boost": sc['boost3'] if sc['strat3'] == "Profit Boost (%)" else 0
+                                })
         status.update(label="Soccer Engine Optimization Complete", state="complete")
     return soccer_opps
 
@@ -357,7 +373,11 @@ def run_bet_get_scan(bg):
     source_book_key = book_map[bg['book']]
     allowed_hedge_keys = [v for k, v in book_map.items() if v != source_book_key]
     now_utc = datetime.now(timezone.utc)
-    lookahead_limit = now_utc + timedelta(days=5)
+    
+    # Restrict window dynamically to today and tomorrow
+    today_date = datetime.now().date()
+    tomorrow_date = today_date + timedelta(days=1)
+    
     bg_opps = []
 
     projected_bonus_value = bg['bonus_val'] * 0.70
@@ -371,7 +391,10 @@ def run_bet_get_scan(bg):
 
             for game in games:
                 commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
-                if commence_time <= now_utc or commence_time > lookahead_limit: continue
+                game_date_local = (commence_time - timedelta(hours=6)).date()
+                
+                if game_date_local not in [today_date, tomorrow_date]: 
+                    continue
 
                 flat_odds = []
                 for bm in game['bookmakers']:
@@ -552,135 +575,95 @@ with st.expander("Main Boost Engine", expanded=True):
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[], placeholder="Select sports...")
         
         btn_col1, btn_col2 = st.columns(2)
-        with btn_col1: add_to_q = st.form_submit_button("Add to Queue", use_container_width=True)
-        with btn_col2: quick_scan = st.form_submit_button("Quick Scan", use_container_width=True)
+        with btn_col1:
+            promo_submit = st.form_submit_button("Execute Scan")
+        with btn_col2:
+            add_queue = st.form_submit_button("Add to Multi-Run Queue")
 
-# --- EXECUTE TOP CONFIG ACTIONS ---
-if quick_scan:
-    if not sp: st.error("Select at least one sport.")
-    elif w <= 0: st.error("Enter a wager amount.")
-    else:
-        temp_p = {"book": b, "strat": s, "wager": w, "sports": sp, "hedge_books": hb, "boost_val": main_boost_val}
-        results = run_promo_scan(temp_p)
-        display_results(results, temp_p)
+    if promo_submit:
+        active_sports = sp if sp else list(sports_map.keys())
+        p_config = {"book": b, "strat": s, "boost_val": main_boost_val, "wager": w, "hedge_books": hb, "sports": active_sports}
+        results = run_promo_scan(p_config)
+        display_results(results, p_config)
 
-if add_to_q:
-    if not sp: st.error("Select at least one sport.")
-    elif w <= 0: st.error("Enter a wager amount.")
-    else:
-        st.session_state.promos.append({"book": b, "strat": s, "wager": w, "sports": sp, "hedge_books": hb, "boost_val": main_boost_val})
-
-# --- RENDER SCAN QUEUE AREA ---
-if st.session_state.promos:
-    st.subheader("Scan Queue")
-    for i, p in enumerate(st.session_state.promos):
-        q_col1, q_col2 = st.columns([9.2, 0.8])
-        with q_col1:
-            hedge_label = ", ".join(p['hedge_books']) if p['hedge_books'] else "ALL"
-            boost_str = f" (+{p['boost_val']}% Boost)" if p['strat'] == "Profit Boost (%)" else ""
-            st.info(f"**{p['book'].upper()}** vs **{hedge_label}** | {p['strat']}{boost_str} | ${p['wager']} | {', '.join(p['sports'])}")
-        with q_col2:
-            if st.button("✕", key=f"rm_{i}"):
-                st.session_state.promos.pop(i)
-                st.rerun()
+# ========================================================
+# LOWER MODULE: SOCCER MULTI-BOOK COMPLEX GRID (3-WAY)
+# ========================================================
+with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=False):
+    ALL_SOCCER_LEAGUES = ["FIFA World Cup"] # Expandable master listing matching backend targets
     
-    run_col, clear_col, cache_col = st.columns([3, 1, 1])
-    with run_col:
-        if st.button("Run All in Queue", use_container_width=True):
-            for promo_item in st.session_state.promos:
-                scan_results = run_promo_scan(promo_item)
-                display_results(scan_results, promo_item)
-                st.divider() 
-    with clear_col:
-        if st.button("Clear Queue", use_container_width=True):
-            st.session_state.promos = []
+    if "soccer_leagues_sel" not in st.session_state:
+        st.session_state["soccer_leagues_sel"] = ["FIFA World Cup"]
+
+    # Select All Row Setup Split
+    col_soc_sel, col_soc_btn = st.columns([4, 1])
+    with col_soc_sel:
+        selected_leagues = st.multiselect(
+            "Filter Tournaments / Leagues", 
+            options=ALL_SOCCER_LEAGUES, 
+            key="soccer_leagues_sel",
+            help="Select specific tournament lines to process inside the complex 3-way matrix."
+        )
+    with col_soc_btn:
+        st.write("") 
+        st.write("")
+        if st.button("Select All Leagues", use_container_width=True):
+            st.session_state["soccer_leagues_sel"] = ALL_SOCCER_LEAGUES
             st.rerun()
-    with cache_col:
-        if st.button("Clear Cache", use_container_width=True):
-            st.cache_data.clear()
-            st.toast("Cache cleared!")
 
-st.write("")
-st.divider()
-
-# ========================================================
-# MIDDLE MODULE: MULTI-BOOK SOCCER ENGINE (SYMMETRIC PROMO + CASH FIELD TRACKER)
-# ========================================================
-st.markdown("### ⚽ Multi-Book Soccer Booster Engine (3-Way leg Configs)")
-with st.expander("Configure Multi-Source Book Soccer Boost Options", expanded=True):
-    sc_c1, sc_c2, sc_c3 = st.columns(3)
-    
-    with sc_c1:
-        st.subheader("Book 1 (Leg A)")
-        sb1 = st.selectbox("Bookmaker leg A", list(book_map.keys()), index=0, key="sb1_k")
-        sw1 = st.number_input("Wager Amount ($)", min_value=0.0, value=0.0, step=5.0, key="sw1_k", help="Base stake size to anchor the remaining leg math from.")
-        ss1 = st.selectbox("Booster Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=1, key="ss1_k")
-        cap1_val = st.number_input("Booster Wager ($)", min_value=0.0, value=0.0, step=5.0, key="cv1", help="Max allowed promo cap limit. Balance spins over to standard cash if exceeded.")
-        sbo1 = st.number_input("Booster Value (%)", min_value=0, value=0, step=5, key="sbo1_k", disabled=(ss1 != "Profit Boost (%)"))
-
-    with sc_c2:
-        st.subheader("Book 2 (Leg B)")
-        sb2 = st.selectbox("Bookmaker Leg B", list(book_map.keys()), index=1, key="sb2_k")
-        ss2 = st.selectbox("Booster Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="ss2_k")
-        cap2_val = st.number_input("Booster Wager ($)", min_value=0.0, value=0.0, step=5.0, key="cv2")
-        sbo2 = st.number_input("Booster Value (%)", min_value=0, value=0, step=5, key="sbo2_k", disabled=(ss2 != "Profit Boost (%)"))
-
-    with sc_c3:
-        st.subheader("Book 3 (Leg C)")
-        sb3 = st.selectbox("Bookmaker Leg C", list(book_map.keys()), index=2, key="sb3_k")
-        ss3 = st.selectbox("Booster Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="ss3_k")
-        cap3_val = st.number_input("Booster Wager ($)", min_value=0.0, value=0.0, step=5.0, key="cv3")
-        sbo3 = st.number_input("Booster Value (%)", min_value=0, value=0, step=5, key="sbo3_k", disabled=(ss3 != "Profit Boost (%)"))
-
-    if st.button("Execute Soccer Multi-Boost Optimization Scan", use_container_width=True):
-        if sw1 <= 0:
-            st.error("Please enter an initial Book 1 Wager Amount to establish base conversion targeting.")
-        elif sb1 == sb2 or sb1 == sb3 or sb2 == sb3:
-            st.error("Error: All 3 legs must be assigned to separate, distinct bookmakers to verify arbitrage coverage.")
-        else:
-            sc_payload = {
-                "book1": sb1, "wager1": sw1, "strat1": ss1, "boost1": sbo1, "cap1_val": cap1_val,
-                "book2": sb2, "strat2": ss2, "boost2": sbo2, "cap2_val": cap2_val,
-                "book3": sb3, "strat3": ss3, "boost3": sbo3, "cap3_val": cap3_val
-            }
-            sc_results = run_multi_book_soccer_scan(sc_payload)
-            st.session_state.soccer_results_cache = sc_results
-
-if 'soccer_results_cache' in st.session_state:
-    display_soccer_results(st.session_state.soccer_results_cache)
-    if st.button("Clear Soccer Grid Display", use_container_width=True):
-        del st.session_state.soccer_results_cache
-        st.rerun()
-
-st.write("")
-st.divider()
-
-# ========================================================
-# BOTTOM MODULE: BET & GET FINDER
-# ========================================================
-st.markdown("### 🟢 Bet & Get Finder (No Boost Required)")
-with st.expander("Configure Bet & Get Promotion Parameters", expanded=False):
-    bg_book = st.selectbox("Qualifying Bookmaker Target", list(book_map.keys()), key="bg_b")
-    
-    col_w, col_v = st.columns(2)
-    with col_w:
-        bg_wager = st.number_input("Required Wager Amount ($)", min_value=0.0, value=0.0, key="bg_w")
-    with col_v:
-        bg_bonus = st.number_input("Bonus Bet Reward Expected ($)", min_value=0.0, value=0.0, key="bg_bon")
+    with st.form("soccer_form"):
+        st.caption("⏳ **Look-Ahead Active:** Processing restricted strictly to Today's and Tomorrow's matches.")
+        st.divider()
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            st.subheader("Leg 1 (Outcome A)")
+            sb1 = st.selectbox("Book Leg 1", list(book_map.keys()), index=0)
+            ss1 = st.selectbox("Type Leg 1", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], index=0)
+            sbv1 = st.number_input("Boost % Leg 1", min_value=0, value=0, step=5)
+            sw1 = st.number_input("Planned Stake Leg 1 ($)", min_value=0.0, value=50.0, step=5.0)
+            scap1 = st.number_input("Promo Cap Value Leg 1 ($)", min_value=0.0, value=0.0, help="0 means no cap")
+        with sc2:
+            st.subheader("Leg 2 (Outcome B)")
+            sb2 = st.selectbox("Book Leg 2", list(book_map.keys()), index=1)
+            ss2 = st.selectbox("Type Leg 2", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], index=0)
+            sbv2 = st.number_input("Boost % Leg 2", min_value=0, value=0, step=5)
+            scap2 = st.number_input("Promo Cap Value Leg 2 ($)", min_value=0.0, value=0.0)
+        with sc3:
+            st.subheader("Leg 3 (Draw)")
+            sb3 = st.selectbox("Book Leg 3", list(book_map.keys()), index=2)
+            ss3 = st.selectbox("Type Leg 3", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], index=0)
+            sbv3 = st.number_input("Boost % Leg 3", min_value=0, value=0, step=5)
+            scap3 = st.number_input("Promo Cap Value Leg 3 ($)", min_value=0.0, value=0.0)
+            
+        soccer_submit = st.form_submit_button("Optimize Complex Soccer Matrix")
         
-    bg_sports = st.multiselect("Leagues to Search", list(sports_map.keys()), default=[], key="bg_s", placeholder="Select sports...")
-    
-    if st.button("Find Cheapest Qualification Paths", use_container_width=True):
-        if bg_wager <= 0 or bg_bonus <= 0 or not bg_sports:
-            st.error("Fill out all parameters and select at least one league.")
-        else:
-            bg_payload = {"book": bg_book, "wager": bg_wager, "bonus_val": bg_bonus, "sports": bg_sports}
-            bg_results = run_bet_get_scan(bg_payload)
-            st.session_state.bg_results_cache = (bg_results, bg_payload)
+    if soccer_submit:
+        active_leagues = selected_leagues if selected_leagues else ALL_SOCCER_LEAGUES
+        soccer_config = {
+            "book1": sb1, "strat1": ss1, "boost1": sbv1, "wager1": sw1, "cap1_val": scap1,
+            "book2": sb2, "strat2": ss2, "boost2": sbv2, "cap2_val": scap2,
+            "book3": sb3, "strat3": ss3, "boost3": sbv3, "cap3_val": scap3,
+            "leagues": active_leagues
+        }
+        soccer_results = run_multi_book_soccer_scan(soccer_config)
+        display_soccer_results(soccer_results)
 
-# Render results panel for Bet & Get right at the bottom zone
-if 'bg_results_cache' in st.session_state:
-    display_bet_get_results(st.session_state.bg_results_cache[0], st.session_state.bg_results_cache[1])
-    if st.button("Clear Bet & Get Display", use_container_width=True):
-        del st.session_state.bg_results_cache
-        st.rerun()
+# ========================================================
+# BOTTOM MODULE: DEDICATED BET & GET QUALIFIER
+# ========================================================
+with st.expander("Dedicated Bet & Get Qualifier Path Finder", expanded=False):
+    with st.form("bet_get_form"):
+        bgc1, bgc2 = st.columns(2)
+        with bgc1:
+            bg_b = st.selectbox("Target Qualifier Book", list(book_map.keys()))
+            bg_w = st.number_input("Required Qualification Stake ($)", min_value=0.0, value=10.0, step=5.0)
+        with bgc2:
+            bg_v = st.number_input("Returned Bonus Value Amount ($)", min_value=0.0, value=5.0, step=5.0)
+            bg_sp = st.multiselect("Market Asset Pool Filter", list(sports_map.keys()), default=list(sports_map.keys()))
+            
+        bg_submit = st.form_submit_button("Locate Qualification Baselines")
+        
+    if bg_submit:
+        bg_config = {"book": bg_b, "wager": bg_w, "bonus_val": bg_v, "sports": bg_sp}
+        bg_results = run_bet_get_scan(bg_config)
+        display_bet_get_results(bg_results, bg_config)
