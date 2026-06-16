@@ -244,7 +244,7 @@ def run_promo_scan(p):
                                         "game": f"{game.get('away_team', 'Away Team')} vs {game.get('home_team', 'Home Team')}",
                                         "sport": sport_label, "market_type": "2-way",
                                         "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
-                                        "exact_profit": best_2way_record['profit'], "exact_hedge": best_2way_record['hedge'],
+                                        "exact_profit": best_2way_profit, "exact_hedge": best_2way_record['hedge'],
                                         "s_team": s['team'], "s_book": s['book_title'], "s_price": s['price'],
                                         "h_book": best_h['book_title'], "h_team": best_h['team'], "h_price": best_h['price'],
                                         "wager": p['wager'], "strat": p['strat'], "used_boost": best_2way_record['used_boost']
@@ -255,7 +255,7 @@ def run_promo_scan(p):
     return all_opps
 
 
-# --- NEW: DEDICATED BET & GET SCAN ENGINE ---
+# --- DEDICATED BET & GET SCAN ENGINE ---
 def run_bet_get_scan(bg):
     source_book_key = book_map[bg['book']]
     allowed_hedge_keys = [v for k, v in book_map.items() if v != source_book_key]
@@ -263,7 +263,6 @@ def run_bet_get_scan(bg):
     lookahead_limit = now_utc + timedelta(days=5)
     bg_opps = []
 
-    # Project the free bet value using a standard 70% retention model
     projected_bonus_value = bg['bonus_val'] * 0.70
 
     with st.status(f"Hunting cheapest qualification routes for {bg['book']}...", expanded=False) as status:
@@ -295,7 +294,7 @@ def run_bet_get_scan(bg):
                         for o2 in odds_t2:
                             for o3 in odds_draw:
                                 if o1['book_key'] == o2['book_key'] or o1['book_key'] == o3['book_key'] or o2['book_key'] == o3['book_key']: continue
-                                if o1['book_key'] != source_book_key: continue # The qualifying $100 bet MUST be on the source book
+                                if o1['book_key'] != source_book_key: continue 
 
                                 sm = get_multiplier(o1['price'])
                                 hm1 = get_multiplier(o2['price'])
@@ -369,7 +368,7 @@ def display_results(all_opps, p):
                     with c_hedge: st.success(f"**{op['h_book'].upper()}**\n\nStake: **${op['exact_hedge']:.2f}**\n\nLine: **{op['h_team']}** @ **{op['h_price']:+}**")
                 st.metric("Net Arbitrage Profit", f"${op['exact_profit']:.2f}")
 
-# --- VIEW RENDERER FOR BET & GET ---
+# --- FIXED: VIEW RENDERER FOR BET & GET ---
 def display_bet_get_results(opps, bg):
     st.markdown(f"<div class='betget-header'><h3>Optimized Qualification Paths for {bg['book']}</h3></div>", unsafe_allow_html=True)
     sorted_opps = sorted(opps, key=lambda x: x['qualifying_loss'], reverse=True) # closest to $0 loss first
@@ -378,7 +377,10 @@ def display_bet_get_results(opps, bg):
         st.warning("No tight lines found for qualification.")
     else:
         for i, op in enumerate(sorted_opps[:10]):
-            header = f"PATH {i+1} | Loss: ${op['qualifying_loss']:.2f} | Net Promo Lock: {op['net_value']:+$2.2f} | {op['game']}"
+            # Fixed the formatting syntax error below by adjusting sign placement
+            sign = "+" if op['net_value'] >= 0 else ""
+            header = f"PATH {i+1} | Loss: ${op['qualifying_loss']:.2f} | Net Promo Lock: {sign}${op['net_value']:.2f} | {op['game']}"
+            
             with st.expander(header):
                 st.caption(f"**League Data:** {op['sport']} | Market: {op['market_type'].upper()}")
                 
