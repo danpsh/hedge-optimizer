@@ -577,7 +577,7 @@ def display_soccer_results(opps):
 
 def display_bet_get_results(opps, bg):
     st.markdown(f"<div class='betget-header'><h3>Optimized Qualification Paths for {bg['book']}</h3></div>", unsafe_allow_html=True)
-    sorted_opps = sorted(opps, key=lambda x: x['qualifying_loss'], reverse=True) 
+    sorted_opps = sorted(opps, key=lambda x: x['qualifying_loss'], reverse=False) 
 
     if not sorted_opps:
         st.warning("No tight lines found for qualification.")
@@ -729,12 +729,14 @@ with st.expander("Dedicated Bet & Get Qualifier Path Finder", expanded=False):
     with st.form("bet_get_form"):
         bgc1, bgc2 = st.columns(2)
         with bgc1:
-            bg_b = st.selectbox("Target Qualifier Book", list(book_map.keys()))
-            bg_w = st.number_input("Required Qualification Stake ($)", min_value=0.0, value=0.0, step=5.0)
+            with st.container(border=True):
+                bg_b = st.selectbox("Book", list(book_map.keys()))
+                bg_w = st.number_input("Qual. Stake ($)", min_value=0.0, value=0.0, step=5.0)
         with bgc2:
-            bg_v = st.number_input("Returned Bonus Value Amount ($)", min_value=0.0, value=0.0, step=5.0)
-            bg_sp = st.multiselect("Market Asset Pool Filter", list(sports_map.keys()), default=[])
-            
+            with st.container(border=True):
+                bg_v = st.number_input("Bonus Value ($)", min_value=0.0, value=0.0, step=5.0)
+                bg_sp = st.multiselect("Sports", list(sports_map.keys()), default=[])
+
         bg_submit = st.form_submit_button("Locate Qualification Baselines")
         
     if bg_submit:
