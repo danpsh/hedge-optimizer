@@ -651,7 +651,7 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
         sc1, sc2, sc3 = st.columns(3)
         with sc1:
             with st.container(border=True):
-                st.subheader("Leg 1 (Outcome A)")
+                st.subheader("Bet 1")
                 sb1 = st.selectbox("Book", list(book_map.keys()), index=0, key="sc_book1")
                 ss1 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type1")
                 sbv1 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost1")
@@ -659,7 +659,7 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
                 scap1 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap1")
         with sc2:
             with st.container(border=True):
-                st.subheader("Leg 2 (Outcome B)")
+                st.subheader("Bet 2")
                 sb2 = st.multiselect("Book(s)", list(book_map.keys()), default=[], placeholder="Select books...", key="sc_book2")
                 ss2 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type2")
                 sbv2 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost2")
@@ -667,7 +667,7 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
                 scap2 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap2")
         with sc3:
             with st.container(border=True):
-                st.subheader("Leg 3 (Draw)")
+                st.subheader("Bet 3")
                 sb3 = st.multiselect("Book(s)", list(book_map.keys()), default=[], placeholder="Select books...", key="sc_book3")
                 ss3 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type3")
                 sbv3 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost3")
