@@ -653,27 +653,6 @@ with st.expander("Main Boost Engine", expanded=True):
 # LOWER MODULE: SOCCER MULTI-BOOK COMPLEX GRID (3-WAY)
 # ========================================================
 with st.expander("3-Way Soccer Engine", expanded=False):
-    ALL_SOCCER_LEAGUES = ["FIFA World Cup"] # Expandable master listing matching backend targets
-    
-    if "soccer_leagues_sel" not in st.session_state:
-        st.session_state["soccer_leagues_sel"] = ["FIFA World Cup"]
-
-    # Select All Row Setup Split
-    col_soc_sel, col_soc_btn = st.columns([4, 1])
-    with col_soc_sel:
-        selected_leagues = st.multiselect(
-            "Filter Tournaments / Leagues", 
-            options=ALL_SOCCER_LEAGUES, 
-            key="soccer_leagues_sel",
-            help="Select specific tournament lines to process inside the complex 3-way matrix."
-        )
-    with col_soc_btn:
-        st.write("") 
-        st.write("")
-        if st.button("Select All Leagues", use_container_width=True):
-            st.session_state["soccer_leagues_sel"] = ALL_SOCCER_LEAGUES
-            st.rerun()
-
     with st.form("soccer_form"):
         # Look-ahead: fixed 3-day window (today + 2)
         today = datetime.now().date()
@@ -711,12 +690,11 @@ with st.expander("3-Way Soccer Engine", expanded=False):
         soccer_submit = st.form_submit_button("Scan")
 
     if soccer_submit:
-        active_leagues = selected_leagues if selected_leagues else ALL_SOCCER_LEAGUES
         soccer_config = {
             "book1": sb1, "strat1": ss1, "boost1": sbv1, "wager1": sw1, "cap1_val": scap1,
             "book2": sb2 if sb2 else list(book_map.keys()), "strat2": ss2, "boost2": sbv2, "wager2": sw2, "cap2_val": scap2,
             "book3": sb3 if sb3 else list(book_map.keys()), "strat3": ss3, "boost3": sbv3, "wager3": sw3, "cap3_val": scap3,
-            "leagues": active_leagues,
+            "leagues": ["FIFA World Cup"],
             "lookahead_end_date": lookahead_end
         }
         soccer_results = run_multi_book_soccer_scan(soccer_config)
