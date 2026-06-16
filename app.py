@@ -659,25 +659,25 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
                 sb1 = st.selectbox("Book", list(book_map.keys()), index=0, key="sc_book1")
                 ss1 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type1")
                 sbv1 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost1")
-                sw1 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake1")
+                sw1 = st.number_input("Stake ($)", min_value=0.0, value=0.0, step=5.0, key="sc_stake1")
                 scap1 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap1")
                 smax1 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay1")
         with sc2:
             with st.container(border=True):
                 st.subheader("Leg 2 (Outcome B)")
-                sb2 = st.multiselect("Book(s)", list(book_map.keys()), default=list(book_map.keys()), placeholder="Select books...", key="sc_book2")
+                sb2 = st.multiselect("Book(s)", list(book_map.keys()), default=[], placeholder="Select books...", key="sc_book2")
                 ss2 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type2")
                 sbv2 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost2")
-                sw2 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake2")
+                sw2 = st.number_input("Stake ($)", min_value=0.0, value=0.0, step=5.0, key="sc_stake2")
                 scap2 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap2")
                 smax2 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay2")
         with sc3:
             with st.container(border=True):
                 st.subheader("Leg 3 (Draw)")
-                sb3 = st.multiselect("Book(s)", list(book_map.keys()), default=list(book_map.keys()), placeholder="Select books...", key="sc_book3")
+                sb3 = st.multiselect("Book(s)", list(book_map.keys()), default=[], placeholder="Select books...", key="sc_book3")
                 ss3 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type3")
                 sbv3 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost3")
-                sw3 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake3")
+                sw3 = st.number_input("Stake ($)", min_value=0.0, value=0.0, step=5.0, key="sc_stake3")
                 scap3 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap3")
                 smax3 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay3")
 
@@ -703,9 +703,9 @@ with st.expander("Dedicated Bet & Get Qualifier Path Finder", expanded=False):
         bgc1, bgc2 = st.columns(2)
         with bgc1:
             bg_b = st.selectbox("Target Qualifier Book", list(book_map.keys()))
-            bg_w = st.number_input("Required Qualification Stake ($)", min_value=0.0, value=10.0, step=5.0)
+            bg_w = st.number_input("Required Qualification Stake ($)", min_value=0.0, value=0.0, step=5.0)
         with bgc2:
-            bg_v = st.number_input("Returned Bonus Value Amount ($)", min_value=0.0, value=5.0, step=5.0)
+            bg_v = st.number_input("Returned Bonus Value Amount ($)", min_value=0.0, value=0.0, step=5.0)
             bg_sp = st.multiselect("Market Asset Pool Filter", list(sports_map.keys()), default=list(sports_map.keys()))
             
         bg_submit = st.form_submit_button("Locate Qualification Baselines")
