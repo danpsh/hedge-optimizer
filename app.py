@@ -3,7 +3,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Promo Converter Master", layout="wide")
+st.set_page_config(page_title="Promo Converter", layout="wide")
 
 # --- PROFESSIONAL THEME ---
 st.markdown("""
@@ -606,7 +606,7 @@ def display_bet_get_results(opps, bg):
 # --- HEADER AREA ---
 c_title, c_quota = st.columns([3, 1])
 with c_title:
-    st.title("Promo Converter Matrix Engine")
+    st.title("Promo Converter")
 with c_quota:
     if 'api_quota' not in st.session_state: st.session_state.api_quota = "—"
     st.metric("API Quota Remaining", st.session_state.api_quota)
