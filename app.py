@@ -523,14 +523,14 @@ def display_soccer_results(opps):
             profit = op['net_profit']
             profit_sign = "+" if profit >= 0 else ""
             # Lead with profit, then time and game
-            header = f"#{i+1} | {op['time']} | {op['game']} | 💰 {profit_sign}${profit:.2f}"
+            header = f"#{i+1} | {op['time']} | {op['game']} | {profit_sign}${profit:.2f}"
             with st.expander(header):
                 cl1, cl2, cl3 = st.columns(3)
 
                 def leg_card(col, label, book, strat, boost, wager, promo, cash, team, price, color_fn):
                     # Build promo type label — no asterisk, tooltip instead
                     if boost > 0:
-                        promo_label = f"{strat} +{boost}% 🎉"
+                        promo_label = f"{strat} +{boost}%"
                         promo_help = f"Profit boost of {boost}% applied to this leg's odds."
                     else:
                         promo_label = strat
