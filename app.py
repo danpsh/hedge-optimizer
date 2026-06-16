@@ -124,7 +124,7 @@ def run_promo_scan(p):
     
     all_opps = []
     
-    with st.status(f"Scanning {p['book']}...", expanded=False) as status:
+    with st.status("Running scan...", expanded=False) as status:
         for sport_label in p['sports']:
             sport_key = sports_map[sport_label]
             games, remaining = fetch_odds(sport_key)
@@ -250,7 +250,7 @@ def run_promo_scan(p):
                                     })
             else:
                 st.error(f"Could not fetch data for {sport_label}")
-        status.update(label=f"Scan Complete", state="complete")
+        status.update(label="Scan complete.", state="complete")
     return all_opps
 
 
@@ -266,7 +266,7 @@ def run_multi_book_soccer_scan(sc):
 
     soccer_opps = []
 
-    with st.status("Parsing complex tri-booster 3-Way line structures...", expanded=False) as status:
+    with st.status("Running scan...", expanded=False) as status:
         # Evaluate checked sports arrays passed from backend parameters
         for league_label in sc['leagues']:
             sport_key = sports_map[league_label]
@@ -389,7 +389,7 @@ def run_multi_book_soccer_scan(sc):
                                     "o2_book": o2['book_title'], "o2_team": o2['team'], "o2_price": o2['price'], "o2_wager": w2_total, "o2_promo": w2_promo, "o2_cash": w2_cash, "o2_strat": sc['strat2'], "o2_boost": sc['boost2'] if sc['strat2'] == "Profit Boost (%)" else 0,
                                     "o3_book": o3['book_title'], "o3_team": o3['team'], "o3_price": o3['price'], "o3_wager": w3_total, "o3_promo": w3_promo, "o3_cash": w3_cash, "o3_strat": sc['strat3'], "o3_boost": sc['boost3'] if sc['strat3'] == "Profit Boost (%)" else 0
                                 })
-        status.update(label="Soccer Engine Optimization Complete", state="complete")
+        status.update(label="Scan complete.", state="complete")
     return soccer_opps
 
 
@@ -407,7 +407,7 @@ def run_bet_get_scan(bg):
 
     projected_bonus_value = bg['bonus_val'] * 0.70
 
-    with st.status(f"Hunting cheapest qualification routes for {bg['book']}...", expanded=False) as status:
+    with st.status("Running scan...", expanded=False) as status:
         for sport_label in bg['sports']:
             sport_key = sports_map[sport_label]
             games, remaining = fetch_odds(sport_key)
@@ -485,7 +485,7 @@ def run_bet_get_scan(bg):
                             "h1_book": best_h['book_title'], "h1_team": best_h['team'], "h1_price": best_h['price'], "h1_wager": h_stake
                         })
 
-        status.update(label="Bet & Get Optimization Complete", state="complete")
+        status.update(label="Scan complete.", state="complete")
     return bg_opps
 
 # --- RENDER FUNCTIONS ---
@@ -498,7 +498,7 @@ def display_results(all_opps, p):
     else:
         for i, op in enumerate(sorted_opps[:15]):
             conv_str = f" | Using {op['used_boost']}% Boost" if op.get('market_type') == "2-way" and op.get('used_boost', 0) > 0 else ""
-            header_title = f"RANK {i+1} | {op['time']} | {op['game']}{conv_str} | Profit: ${op['exact_profit']:.2f}"
+            header_title = f"#{i+1} | {op['time']} | {op['game']}{conv_str} | {('+' if op['exact_profit'] >= 0 else '')}${op['exact_profit']:.2f}"
             
             with st.expander(header_title):
                 if op.get('market_type') == "3-way":
@@ -584,7 +584,7 @@ def display_bet_get_results(opps, bg):
     else:
         for i, op in enumerate(sorted_opps[:10]):
             sign = "+" if op['net_value'] >= 0 else ""
-            header = f"PATH {i+1} | Loss: ${op['qualifying_loss']:.2f} | Net Promo Lock: {sign}${op['net_value']:.2f} | {op['game']}"
+            header = f"#{i+1} | {op['time']} | {op['game']} | {sign}${op['net_value']:.2f}"
             
             with st.expander(header):
                 st.caption(f"**League Data:** {op['sport']} | Market: {op['market_type'].upper()}")
@@ -639,7 +639,7 @@ with st.expander("Main Boost Engine", expanded=True):
         
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
-            promo_submit = st.form_submit_button("Execute Scan")
+            promo_submit = st.form_submit_button("Scan")
         with btn_col2:
             add_queue = st.form_submit_button("Add to Multi-Run Queue")
 
@@ -708,7 +708,7 @@ with st.expander("3-Way Soccer Engine", expanded=False):
                 sw3 = st.number_input("Stake ($)", min_value=0.0, value=0.0, step=5.0, key="sc_stake3")
                 scap3 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap3")
 
-        soccer_submit = st.form_submit_button("Optimize Complex Soccer Matrix")
+        soccer_submit = st.form_submit_button("Scan")
 
     if soccer_submit:
         active_leagues = selected_leagues if selected_leagues else ALL_SOCCER_LEAGUES
@@ -737,7 +737,7 @@ with st.expander("Bet and Get Engine", expanded=False):
                 bg_v = st.number_input("Bonus Value ($)", min_value=0.0, value=0.0, step=5.0)
                 bg_sp = st.multiselect("Sports", list(sports_map.keys()), default=[])
 
-        bg_submit = st.form_submit_button("Locate Qualification Baselines")
+        bg_submit = st.form_submit_button("Scan")
         
     if bg_submit:
         bg_config = {"book": bg_b, "wager": bg_w, "bonus_val": bg_v, "sports": bg_sp}
