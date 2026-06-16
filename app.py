@@ -592,7 +592,7 @@ with st.expander("Main Boost Engine", expanded=True):
                 main_boost_val = st.number_input("Boost Value (%)", min_value=0, value=0, step=5, help="Only applies if Promo Type is set to Profit Boost (%)", disabled=(s != "Profit Boost (%)"))
         with col3:
             with st.container(border=True):
-                hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
+                hb = st.multiselect("Hedge Book(s)", list(book_map.keys()), placeholder="All Books")
         with col4:
             with st.container(border=True):
                 sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[], placeholder="Select sports...")
