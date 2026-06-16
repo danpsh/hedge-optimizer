@@ -35,6 +35,14 @@ st.markdown("""
         margin-bottom: 10px;
         border-left: 5px solid #1e293b;
     }
+    .soccer-header {
+        background-color: #f0f9ff;
+        padding: 10px;
+        border-radius: 8px;
+        margin-top: 20px;
+        margin-bottom: 10px;
+        border-left: 5px solid #0284c7;
+    }
     .betget-header {
         background-color: #f0fdf4;
         padding: 10px;
@@ -90,7 +98,7 @@ def parse_boosters(input_str):
     except:
         return [0]
 
-# --- UNIVERSAL SCAN ENGINE ---
+# --- UNIVERSAL SCAN ENGINE (MAIN BOOST ENGINE) ---
 def run_promo_scan(p):
     if not p['hedge_books']:
         allowed_hedge_keys = [v for k, v in book_map.items() if v != book_map[p['book']]]
@@ -129,7 +137,7 @@ def run_promo_scan(p):
                     if not flat_odds: continue
                     unique_outcomes = list(set([o['team'] for o in flat_odds]))
 
-                    # --- 3-WAY SOCCER MARKETS ---
+                    # 3-Way Conversion
                     if len(unique_outcomes) == 3:
                         t1, t2, draw = unique_outcomes[0], unique_outcomes[1], unique_outcomes[2]
                         odds_t1 = [o for o in flat_odds if o['team'] == t1]
@@ -139,10 +147,8 @@ def run_promo_scan(p):
                         for o1 in odds_t1:
                             for o2 in odds_t2:
                                 for o3 in odds_draw:
-                                    if o1['book_key'] == o2['book_key'] or o1['book_key'] == o3['book_key'] or o2['book_key'] == o3['book_key']:
-                                        continue
-                                    if source_book_key not in [o1['book_key'], o2['book_key'], o3['book_key']]:
-                                        continue
+                                    if o1['book_key'] == o2['book_key'] or o1['book_key'] == o3['book_key'] or o2['book_key'] == o3['book_key']: continue
+                                    if source_book_key not in [o1['book_key'], o2['book_key'], o3['book_key']]: continue
 
                                     b1_list = p['all_boosts'].get(o1['book_key'], [0])
                                     b2_list = p['all_boosts'].get(o2['book_key'], [0])
@@ -170,7 +176,7 @@ def run_promo_scan(p):
                                                     h2_stake = target_pay / (1 + m2)
                                                     h3_stake = target_pay / (1 + m3)
                                                     exact_profit = target_pay - (0 if o1['book_key'] == source_book_key else p['wager']) - h2_stake - h3_stake
-                                                else: # No-Sweat Bet
+                                                else: 
                                                     mc = 0.65
                                                     m1 = get_multiplier(o1['price'])
                                                     m2 = get_multiplier(o2['price'])
@@ -197,6 +203,7 @@ def run_promo_scan(p):
                                             "s_team": o1['team'], "s_book": o1['book_title'], "s_price": o1['price'], "exact_w1": best_3way_record['w1'],
                                             "h1_book": o2['book_title'], "h1_team": o2['team'], "h1_price": o2['price'], "exact_hedge1": best_3way_record['w2'],
                                             "h2_book": o3['book_title'], "h2_team": o3['team'], "h2_price": o3['price'], "exact_hedge2": best_3way_record['w3'],
+                                            "used_boost": best_3way_record['b1']
                                         })
 
                     # --- STANDARD 2-WAY MARKETS ---
@@ -229,7 +236,7 @@ def run_promo_scan(p):
                                         target_payout = p['wager'] * sm
                                         raw_h = target_payout / (1 + hm)
                                         exact_profit = target_payout - raw_h
-                                    else:  # No-Sweat Bet
+                                    else: 
                                         mc = 0.65
                                         target_payout = p['wager'] * (1 + sm)
                                         raw_h = (target_payout - (p['wager'] * mc)) / (1 + hm)
@@ -253,6 +260,89 @@ def run_promo_scan(p):
                 st.error(f"Could not fetch data for {sport_label}")
         status.update(label=f"Scan Complete", state="complete")
     return all_opps
+
+
+# --- NEW ENGINE: DUAL SOURCE BOOK 3-WAY SOCCER SCANNER ---
+def run_multi_book_soccer_scan(sc):
+    book1_key = book_map[sc['book1']]
+    book2_key = book_map[sc['book2']] if sc['use_two_books'] else None
+    
+    # Allowed hedge keys are everything else
+    allowed_keys = list(book_map.values())
+    
+    now_utc = datetime.now(timezone.utc)
+    lookahead_limit = now_utc + timedelta(days=5)
+    soccer_opps = []
+
+    with st.status("Parsing complex 3-Way line structures...", expanded=False) as status:
+        sport_key = sports_map["FIFA World Cup"]
+        games, remaining = fetch_odds(sport_key)
+        if games:
+            st.session_state.api_quota = remaining
+            for game in games:
+                commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
+                if commence_time <= now_utc or commence_time > lookahead_limit: continue
+
+                flat_odds = []
+                for bm in game['bookmakers']:
+                    if bm['key'] in allowed_keys:
+                        for o in bm['markets'][0]['outcomes']:
+                            flat_odds.append({'book_key': bm['key'], 'book_title': bm['title'], 'team': o['name'], 'price': o['price']})
+
+                unique_outcomes = list(set([o['team'] for o in flat_odds]))
+                if len(unique_outcomes) != 3: continue
+
+                t1, t2, draw = unique_outcomes[0], unique_outcomes[1], unique_outcomes[2]
+                odds_t1 = [o for o in flat_odds if o['team'] == t1]
+                odds_t2 = [o for o in flat_odds if o['team'] == t2]
+                odds_draw = [o for o in flat_odds if o['team'] == draw]
+
+                for o1 in odds_t1:
+                    for o2 in odds_t2:
+                        for o3 in odds_draw:
+                            # Verify no single book controls everything
+                            if o1['book_key'] == o2['book_key'] == o3['book_key']: continue
+                            
+                            # Validate alignment rules based on user inputs
+                            b1_match = (o1['book_key'] == book1_key)
+                            b2_match = (o2['book_key'] == book2_key) if book2_key else False
+                            
+                            if not b1_match and not b2_match: continue
+
+                            # Pull multipliers
+                            m1_raw = get_multiplier(o1['price'])
+                            m2_raw = get_multiplier(o2['price'])
+                            m3_raw = get_multiplier(o3['price'])
+
+                            # Apply boost arrays
+                            b1_boosts = [sc['boost1']] if b1_match else [0]
+                            b2_boosts = [sc['boost2']] if b2_match else [0]
+
+                            for b1 in b1_boosts:
+                                for b2 in b2_boosts:
+                                    m1 = m1_raw * (1 + (b1 / 100))
+                                    m2 = m2_raw * (1 + (b2 / 100))
+                                    m3 = m3_raw # Hedge is unboosted
+
+                                    # Run pricing configuration based on primary stake limits
+                                    target_pay = sc['wager1'] * (1 + m1)
+                                    h2_stake = target_pay / (1 + m2)
+                                    h3_stake = target_pay / (1 + m3)
+
+                                    total_outlay = sc['wager1'] + h2_stake + h3_stake
+                                    net_profit = target_pay - total_outlay
+
+                                    soccer_opps.append({
+                                        "game": f"{game.get('away_team')} vs {game.get('home_team')}",
+                                        "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
+                                        "net_profit": net_profit,
+                                        "o1_book": o1['book_title'], "o1_team": o1['team'], "o1_price": o1['price'], "o1_wager": sc['wager1'], "o1_boost": b1,
+                                        "o2_book": o2['book_title'], "o2_team": o2['team'], "o2_price": o2['price'], "o2_wager": h2_stake, "o2_boost": b2,
+                                        "o3_book": o3['book_title'], "o3_team": o3['team'], "o3_price": o3['price'], "o3_wager": h3_stake
+                                    })
+        status.update(label="Soccer Engine Optimization Complete", state="complete")
+    return soccer_opps
+
 
 # --- DEDICATED BET & GET SCAN ENGINE ---
 def run_bet_get_scan(bg):
@@ -283,7 +373,6 @@ def run_bet_get_scan(bg):
 
                 unique_outcomes = list(set([o['team'] for o in flat_odds]))
 
-                # 3-Way Bet & Get Logic
                 if len(unique_outcomes) == 3:
                     odds_t1 = [o for o in flat_odds if o['team'] == unique_outcomes[0]]
                     odds_t2 = [o for o in flat_odds if o['team'] == unique_outcomes[1]]
@@ -314,7 +403,6 @@ def run_bet_get_scan(bg):
                                     "h2_book": o3['book_title'], "h2_team": o3['team'], "h2_price": o3['price'], "h2_wager": h2_stake
                                 })
 
-                # 2-Way Bet & Get Logic
                 elif len(unique_outcomes) == 2:
                     source_odds = [o for o in flat_odds if o['book_key'] == source_book_key]
                     hedge_odds = [o for o in flat_odds if o['book_key'] in allowed_hedge_keys]
@@ -344,6 +432,7 @@ def run_bet_get_scan(bg):
         status.update(label="Bet & Get Optimization Complete", state="complete")
     return bg_opps
 
+# --- RENDER FUNCTIONS ---
 def display_results(all_opps, p):
     st.markdown(f"<div class='promo-header'><h3>Results for {p['book']} - {p['strat']}</h3></div>", unsafe_allow_html=True)
     sorted_opps = sorted(all_opps, key=lambda x: x['exact_profit'], reverse=True)
@@ -366,6 +455,28 @@ def display_results(all_opps, p):
                     with c_main: st.info(f"**{op['s_book'].upper()}**\n\nStake: **${op['wager']:.2f}**\n\nLine: **{op['s_team']}** @ **{op['s_price']:+}**")
                     with c_hedge: st.success(f"**{op['h_book'].upper()}**\n\nStake: **${op['exact_hedge']:.2f}**\n\nLine: **{op['h_team']}** @ **{op['h_price']:+}**")
                 st.metric("Net Arbitrage Profit", f"${op['exact_profit']:.2f}")
+
+def display_soccer_results(opps):
+    st.markdown("<div class='soccer-header'><h3>Optimized Multi-Book Soccer Arbitrage Paths</h3></div>", unsafe_allow_html=True)
+    sorted_opps = sorted(opps, key=lambda x: x['net_profit'], reverse=True)
+    
+    if not sorted_opps:
+        st.warning("No matches pairing your designated book criteria were discovered.")
+    else:
+        for i, op in enumerate(sorted_opps[:10]):
+            header = f"SOCCER MATCH {i+1} | Return: ${op['net_profit']:.2f} | {op['time']} | {op['game']}"
+            with st.expander(header):
+                cl1, cl2, cl3 = st.columns(3)
+                
+                b1_str = f" (+{op['o1_boost']}% Boost)" if op['o1_boost'] > 0 else ""
+                with cl1: st.info(f"**OUTCOME A**\n\n**{op['o1_book']}**{b1_str}\n\nBet: **${op['o1_wager']:.2f}**\n\n{op['o1_team']} @ {op['o1_price']:+}")
+                
+                b2_str = f" (+{op['o2_boost']}% Boost)" if op['o2_boost'] > 0 else ""
+                with cl2: st.success(f"**OUTCOME B**\n\n**{op['o2_book']}**{b2_str}\n\nBet: **${op['o2_wager']:.2f}**\n\n{op['o2_team']} @ {op['o2_price']:+}")
+                
+                with cl3: st.warning(f"**OUTCOME C (HEDGE)**\n\n**{op['o3_book']}**\n\nBet: **${op['o3_wager']:.2f}**\n\n{op['o3_team']} @ {op['o3_price']:+}")
+                
+                st.metric("Risk-Free Profit Generated", f"${op['net_profit']:.2f}")
 
 def display_bet_get_results(opps, bg):
     st.markdown(f"<div class='betget-header'><h3>Optimized Qualification Paths for {bg['book']}</h3></div>", unsafe_allow_html=True)
@@ -405,11 +516,11 @@ with c_quota:
 
 st.divider()
 
-# --- INITIALIZE STATE QUEUE ---
+# --- INITIALIZE STATE QUEUES ---
 if 'promos' not in st.session_state: st.session_state.promos = []
 
 # ========================================================
-# TOP SUBSURFACE: MULTI-BOOK & SOCCER CONFIG
+# TOP SUBSURFACE: MULTI-BOOK MATRIX & MAIN PROMO INPUTS
 # ========================================================
 st.markdown("### 🛠️ Multi-Book Booster Matrix Configuration")
 col_b1, col_b2, col_b3, col_b4 = st.columns(4)
@@ -425,7 +536,7 @@ global_boost_map = {
 
 st.write("")
 
-with st.expander("Soccer Config", expanded=True):
+with st.expander("Main Boost Engine", expanded=True):
     with st.form("promo_form", clear_on_submit=False):
         col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
         with col1:
@@ -436,7 +547,7 @@ with st.expander("Soccer Config", expanded=True):
         with col3:
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
         with col4:
-            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["FIFA World Cup"], placeholder="Select sports...")
+            sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=["MLB", "WNBA"], placeholder="Select sports...")
         
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1: add_to_q = st.form_submit_button("Add to Queue", use_container_width=True)
@@ -485,6 +596,40 @@ if st.session_state.promos:
         if st.button("Clear Cache", use_container_width=True):
             st.cache_data.clear()
             st.toast("Cache cleared!")
+
+st.write("")
+st.divider()
+
+# ========================================================
+# MIDDLE SUBSURFACE: DUAL DEDICATED SOCCER SCANNER
+# ========================================================
+st.markdown("### ⚽ Multi-Book Soccer Booster Engine (3-Way Markets)")
+with st.expander("Configure Multi-Source Book Soccer Boost Options", expanded=True):
+    sc_c1, sc_c2 = st.columns(2)
+    
+    with sc_c1:
+        sb1 = st.selectbox("Primary Source Book (Outcome 1)", list(book_map.keys()), index=0)
+        sw1 = st.number_input("Primary Book Bet Size ($)", min_value=5.0, value=100.0, step=5.0)
+        sbo1 = st.number_input("Primary Book Boost Value (%)", min_value=0, value=25, step=5)
+
+    with sc_c2:
+        use_second = st.checkbox("Enable Second Boosted Source Book?", value=True)
+        sb2 = st.selectbox("Secondary Source Book (Outcome 2)", list(book_map.keys()), index=1, disabled=not use_second)
+        sbo2 = st.number_input("Secondary Book Boost Value (%)", min_value=0, value=50, step=5, disabled=not use_second)
+
+    if st.button("Execute Soccer Multi-Boost Optimization Scan", use_container_width=True):
+        sc_payload = {
+            "book1": sb1, "wager1": sw1, "boost1": sbo1,
+            "use_two_books": use_second, "book2": sb2, "boost2": sbo2
+        }
+        sc_results = run_multi_book_soccer_scan(sc_payload)
+        st.session_state.soccer_results_cache = sc_results
+
+if 'soccer_results_cache' in st.session_state:
+    display_soccer_results(st.session_state.soccer_results_cache)
+    if st.button("Clear Soccer Grid Display", use_container_width=True):
+        del st.session_state.soccer_results_cache
+        st.rerun()
 
 st.write("")
 st.divider()
