@@ -257,8 +257,8 @@ def run_promo_scan(p):
 # --- ENGINE: SOCCER 3-WAY MATRIX WITH COMPLETE SPLIT CASH OVERRIDES ON ALL 3 LEGS ---
 def run_multi_book_soccer_scan(sc):
     book1_key = book_map[sc['book1']]
-    book2_key = book_map[sc['book2']]
-    book3_key = book_map[sc['book3']]
+    book2_keys = [book_map[b] for b in sc['book2']] if sc['book2'] else list(book_map.values())
+    book3_keys = [book_map[b] for b in sc['book3']] if sc['book3'] else list(book_map.values())
     allowed_keys = list(book_map.values())
 
     today_date = datetime.now().date()
@@ -298,7 +298,7 @@ def run_multi_book_soccer_scan(sc):
                         for o2 in odds_t2:
                             for o3 in odds_draw:
                                 if o1['book_key'] == o2['book_key'] or o1['book_key'] == o3['book_key'] or o2['book_key'] == o3['book_key']: continue
-                                if o1['book_key'] != book1_key or o2['book_key'] != book2_key or o3['book_key'] != book3_key: continue
+                                if o1['book_key'] != book1_key or o2['book_key'] not in book2_keys or o3['book_key'] not in book3_keys: continue
 
                                 # --- SHARED HELPER: compute leg payout given strategy + caps ---
                                 def leg_payout(w_total, strat, boost_pct, m_raw, cap_val, maxpay_val):
@@ -669,7 +669,7 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
         with sc2:
             with st.container(border=True):
                 st.subheader("Leg 2 (Outcome B)")
-                sb2 = st.selectbox("Book", list(book_map.keys()), index=1, key="sc_book2")
+                sb2 = st.multiselect("Book(s)", list(book_map.keys()), default=list(book_map.keys()), placeholder="Select books...", key="sc_book2")
                 ss2 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type2")
                 sbv2 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost2", disabled=(ss2 != "Profit Boost (%)"))
                 sw2 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake2")
@@ -678,7 +678,7 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
         with sc3:
             with st.container(border=True):
                 st.subheader("Leg 3 (Draw)")
-                sb3 = st.selectbox("Book", list(book_map.keys()), index=2, key="sc_book3")
+                sb3 = st.multiselect("Book(s)", list(book_map.keys()), default=list(book_map.keys()), placeholder="Select books...", key="sc_book3")
                 ss3 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type3")
                 sbv3 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost3", disabled=(ss3 != "Profit Boost (%)"))
                 sw3 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake3")
@@ -691,8 +691,8 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
         active_leagues = selected_leagues if selected_leagues else ALL_SOCCER_LEAGUES
         soccer_config = {
             "book1": sb1, "strat1": ss1, "boost1": sbv1, "wager1": sw1, "cap1_val": scap1, "maxpay1": smax1,
-            "book2": sb2, "strat2": ss2, "boost2": sbv2, "wager2": sw2, "cap2_val": scap2, "maxpay2": smax2,
-            "book3": sb3, "strat3": ss3, "boost3": sbv3, "wager3": sw3, "cap3_val": scap3, "maxpay3": smax3,
+            "book2": sb2 if sb2 else list(book_map.keys()), "strat2": ss2, "boost2": sbv2, "wager2": sw2, "cap2_val": scap2, "maxpay2": smax2,
+            "book3": sb3 if sb3 else list(book_map.keys()), "strat3": ss3, "boost3": sbv3, "wager3": sw3, "cap3_val": scap3, "maxpay3": smax3,
             "leagues": active_leagues,
             "lookahead_end_date": lookahead_end
         }
