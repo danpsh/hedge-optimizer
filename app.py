@@ -260,13 +260,10 @@ def run_multi_book_soccer_scan(sc):
     book2_key = book_map[sc['book2']]
     book3_key = book_map[sc['book3']]
     allowed_keys = list(book_map.values())
-    
-    now_utc = datetime.now(timezone.utc)
-    
-    # Restrict window dynamically to today and tomorrow
+
     today_date = datetime.now().date()
-    tomorrow_date = today_date + timedelta(days=1)
-    
+    end_date = sc['lookahead_end_date']
+
     soccer_opps = []
 
     with st.status("Parsing complex tri-booster 3-Way line structures...", expanded=False) as status:
@@ -279,8 +276,8 @@ def run_multi_book_soccer_scan(sc):
                 for game in games:
                     commence_time = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                     game_date_local = (commence_time - timedelta(hours=6)).date()
-                    
-                    if game_date_local not in [today_date, tomorrow_date]: 
+
+                    if not (today_date <= game_date_local <= end_date):
                         continue
 
                     flat_odds = []
@@ -635,7 +632,20 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
             st.rerun()
 
     with st.form("soccer_form"):
-        st.caption("⏳ **Look-Ahead Active:** Processing restricted strictly to Today's and Tomorrow's matches.")
+        # --- LOOK-AHEAD FILTER ---
+        la_col1, la_col2 = st.columns([1, 3])
+        with la_col1:
+            la_mode = st.radio("Look-Ahead Mode", ["Days Ahead", "Pick a Date"], horizontal=True)
+        with la_col2:
+            today = datetime.now().date()
+            if la_mode == "Days Ahead":
+                la_days = st.slider("Days Ahead", min_value=1, max_value=14, value=3, help="Include games up to this many days from today")
+                lookahead_end = today + timedelta(days=la_days - 1)
+                st.caption(f"📅 Scanning **{la_days} day{'s' if la_days > 1 else ''}** — through **{lookahead_end.strftime('%b %d, %Y')}**")
+            else:
+                lookahead_end = st.date_input("End Date", value=today + timedelta(days=2), min_value=today, max_value=today + timedelta(days=90))
+                delta = (lookahead_end - today).days + 1
+                st.caption(f"📅 Scanning **{delta} day{'s' if delta > 1 else ''}** — through **{lookahead_end.strftime('%b %d, %Y')}**")
         st.divider()
         sc1, sc2, sc3 = st.columns(3)
         with sc1:
@@ -666,7 +676,8 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
             "book1": sb1, "strat1": ss1, "boost1": sbv1, "wager1": sw1, "cap1_val": scap1,
             "book2": sb2, "strat2": ss2, "boost2": sbv2, "cap2_val": scap2,
             "book3": sb3, "strat3": ss3, "boost3": sbv3, "cap3_val": scap3,
-            "leagues": active_leagues
+            "leagues": active_leagues,
+            "lookahead_end_date": lookahead_end
         }
         soccer_results = run_multi_book_soccer_scan(soccer_config)
         display_soccer_results(soccer_results)
