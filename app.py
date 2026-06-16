@@ -513,7 +513,7 @@ def display_results(all_opps, p):
                 st.metric("Net Arbitrage Profit", f"${op['exact_profit']:.2f}")
 
 def display_soccer_results(opps):
-    st.markdown("<div class='soccer-header'><h3>Optimized Multi-Book Soccer Arbitrage Paths</h3></div>", unsafe_allow_html=True)
+    st.markdown("<div class='soccer-header'><h3>3-Way Soccer Engine Results</h3></div>", unsafe_allow_html=True)
     sorted_opps = sorted(opps, key=lambda x: x['net_profit'], reverse=True)
 
     if not sorted_opps:
@@ -576,7 +576,7 @@ def display_soccer_results(opps):
                 )
 
 def display_bet_get_results(opps, bg):
-    st.markdown(f"<div class='betget-header'><h3>Optimized Qualification Paths for {bg['book']}</h3></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='betget-header'><h3>Bet and Get Engine — {bg['book']}</h3></div>", unsafe_allow_html=True)
     sorted_opps = sorted(opps, key=lambda x: x['qualifying_loss'], reverse=False) 
 
     if not sorted_opps:
@@ -652,7 +652,7 @@ with st.expander("Main Boost Engine", expanded=True):
 # ========================================================
 # LOWER MODULE: SOCCER MULTI-BOOK COMPLEX GRID (3-WAY)
 # ========================================================
-with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=False):
+with st.expander("3-Way Soccer Engine", expanded=False):
     ALL_SOCCER_LEAGUES = ["FIFA World Cup"] # Expandable master listing matching backend targets
     
     if "soccer_leagues_sel" not in st.session_state:
@@ -725,7 +725,7 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
 # ========================================================
 # BOTTOM MODULE: DEDICATED BET & GET QUALIFIER
 # ========================================================
-with st.expander("Dedicated Bet & Get Qualifier Path Finder", expanded=False):
+with st.expander("Bet and Get Engine", expanded=False):
     with st.form("bet_get_form"):
         bgc1, bgc2 = st.columns(2)
         with bgc1:
