@@ -51,13 +51,11 @@ book_map = {
     "BetMGM": "betmgm"
 }
 
-# --- ACTIVE SPORTS ---
+# --- ACTIVE SPORTS (NHL and UFC removed) ---
 sports_map = {
     "WNBA": "basketball_wnba",
-    "NHL": "icehockey_nhl",
     "MLB": "baseball_mlb",
-    "FIFA World Cup": "soccer_fifa_world_cup",
-    "UFC": "mma_mixed_martial_arts"
+    "FIFA World Cup": "soccer_fifa_world_cup"
 }
 
 # --- CACHED API FETCHING ---
@@ -140,7 +138,7 @@ def run_promo_scan(p):
 
                             for h1 in eligible_h1:
                                 for h2 in eligible_h2:
-                                    # STRIKT REQUIREMENT: Books must be different from each other
+                                    # STRICT REQUIREMENT: Books must be different from each other
                                     if h1['book_key'] == h2['book_key']:
                                         continue
                                     
@@ -192,7 +190,7 @@ def run_promo_scan(p):
                                 })
 
                     # ----------------------------------------------------
-                    # CASE 2: STANDARD 2-WAY MARKET (WNBA, MLB, NHL, UFC)
+                    # CASE 2: STANDARD 2-WAY MARKET (WNBA, MLB)
                     # ----------------------------------------------------
                     elif len(all_outcomes) == 2:
                         for s in source_odds:
@@ -251,7 +249,8 @@ def display_results(all_opps, p):
     if not sorted_opps:
         st.warning(f"No profitable matches found for {p['book']}.")
     else:
-        for i, op in enumerate(sorted_opps[:10]):
+        # Sliced to 15 elements to display the top 15 ranks
+        for i, op in enumerate(sorted_opps[:15]):
             if op['strat'] == "Bonus Bet":
                 conv_rate = (op['exact_profit'] / op['wager']) * 100
                 conv_str = f" | {conv_rate:.1f}% Conversion"
