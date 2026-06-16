@@ -301,7 +301,7 @@ def run_multi_book_soccer_scan(sc):
                                 if o1['book_key'] != book1_key or o2['book_key'] not in book2_keys or o3['book_key'] not in book3_keys: continue
 
                                 # --- SHARED HELPER: compute leg payout given strategy + caps ---
-                                def leg_payout(w_total, strat, boost_pct, m_raw, cap_val, maxpay_val):
+                                def leg_payout(w_total, strat, boost_pct, m_raw, cap_val):
                                     """Returns (target_payout, outlay, w_promo, w_cash) for one leg."""
                                     mc_nosweat = 0.65
                                     m_boosted = m_raw * (1 + boost_pct / 100) if strat == "Profit Boost (%)" else m_raw
@@ -324,14 +324,12 @@ def run_multi_book_soccer_scan(sc):
                                         raw_pay = (w_promo * (1 + m_boosted)) + (w_cash * (1 + m_raw))
                                         outlay = w_total
 
-                                    # Apply max payout cap if set
-                                    pay = min(raw_pay, maxpay_val) if maxpay_val > 0 else raw_pay
-                                    return pay, outlay, w_promo, w_cash
+                                    return raw_pay, outlay, w_promo, w_cash
 
                                 # --- LEG 1 (drives target payout) ---
                                 m1_raw = get_multiplier(o1['price'])
                                 target_pay, outlay1, w1_promo, w1_cash = leg_payout(
-                                    sc['wager1'], sc['strat1'], sc['boost1'], m1_raw, sc['cap1_val'], sc['maxpay1']
+                                    sc['wager1'], sc['strat1'], sc['boost1'], m1_raw, sc['cap1_val']
                                 )
                                 w1_total = sc['wager1']
 
@@ -341,20 +339,19 @@ def run_multi_book_soccer_scan(sc):
                                 div_promo2 = m2_boosted if sc['strat2'] == "Bonus Bet" else (1 + m2_boosted)
                                 div_cash2 = 1 + m2_raw
 
-                                effective_target2 = min(target_pay, sc['maxpay2']) if sc['maxpay2'] > 0 else target_pay
 
                                 if sc['strat2'] != "Straight Cash" and sc['cap2_val'] > 0:
                                     max_promo_pay2 = sc['cap2_val'] * div_promo2
-                                    if effective_target2 > max_promo_pay2:
+                                    if target_pay > max_promo_pay2:
                                         w2_promo = sc['cap2_val']
-                                        w2_cash = (effective_target2 - max_promo_pay2) / div_cash2
+                                        w2_cash = (target_pay - max_promo_pay2) / div_cash2
                                     else:
-                                        w2_promo = effective_target2 / div_promo2
+                                        w2_promo = target_pay / div_promo2
                                         w2_cash = 0.0
                                 elif sc['strat2'] == "Straight Cash":
-                                    w2_promo, w2_cash = 0.0, effective_target2 / div_cash2
+                                    w2_promo, w2_cash = 0.0, target_pay / div_cash2
                                 else:
-                                    w2_promo, w2_cash = effective_target2 / div_promo2, 0.0
+                                    w2_promo, w2_cash = target_pay / div_promo2, 0.0
 
                                 w2_total = w2_promo + w2_cash
                                 outlay2 = w2_cash if sc['strat2'] == "Bonus Bet" else w2_total
@@ -365,20 +362,19 @@ def run_multi_book_soccer_scan(sc):
                                 div_promo3 = m3_boosted if sc['strat3'] == "Bonus Bet" else (1 + m3_boosted)
                                 div_cash3 = 1 + m3_raw
 
-                                effective_target3 = min(target_pay, sc['maxpay3']) if sc['maxpay3'] > 0 else target_pay
 
                                 if sc['strat3'] != "Straight Cash" and sc['cap3_val'] > 0:
                                     max_promo_pay3 = sc['cap3_val'] * div_promo3
-                                    if effective_target3 > max_promo_pay3:
+                                    if target_pay > max_promo_pay3:
                                         w3_promo = sc['cap3_val']
-                                        w3_cash = (effective_target3 - max_promo_pay3) / div_cash3
+                                        w3_cash = (target_pay - max_promo_pay3) / div_cash3
                                     else:
-                                        w3_promo = effective_target3 / div_promo3
+                                        w3_promo = target_pay / div_promo3
                                         w3_cash = 0.0
                                 elif sc['strat3'] == "Straight Cash":
-                                    w3_promo, w3_cash = 0.0, effective_target3 / div_cash3
+                                    w3_promo, w3_cash = 0.0, target_pay / div_cash3
                                 else:
-                                    w3_promo, w3_cash = effective_target3 / div_promo3, 0.0
+                                    w3_promo, w3_cash = target_pay / div_promo3, 0.0
 
                                 w3_total = w3_promo + w3_cash
                                 outlay3 = w3_cash if sc['strat3'] == "Bonus Bet" else w3_total
@@ -661,7 +657,6 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
                 sbv1 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost1")
                 sw1 = st.number_input("Stake ($)", min_value=0.0, value=0.0, step=5.0, key="sc_stake1")
                 scap1 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap1")
-                smax1 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay1")
         with sc2:
             with st.container(border=True):
                 st.subheader("Leg 2 (Outcome B)")
@@ -670,7 +665,6 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
                 sbv2 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost2")
                 sw2 = st.number_input("Stake ($)", min_value=0.0, value=0.0, step=5.0, key="sc_stake2")
                 scap2 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap2")
-                smax2 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay2")
         with sc3:
             with st.container(border=True):
                 st.subheader("Leg 3 (Draw)")
@@ -679,16 +673,15 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
                 sbv3 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost3")
                 sw3 = st.number_input("Stake ($)", min_value=0.0, value=0.0, step=5.0, key="sc_stake3")
                 scap3 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap3")
-                smax3 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay3")
 
         soccer_submit = st.form_submit_button("Optimize Complex Soccer Matrix")
 
     if soccer_submit:
         active_leagues = selected_leagues if selected_leagues else ALL_SOCCER_LEAGUES
         soccer_config = {
-            "book1": sb1, "strat1": ss1, "boost1": sbv1, "wager1": sw1, "cap1_val": scap1, "maxpay1": smax1,
-            "book2": sb2 if sb2 else list(book_map.keys()), "strat2": ss2, "boost2": sbv2, "wager2": sw2, "cap2_val": scap2, "maxpay2": smax2,
-            "book3": sb3 if sb3 else list(book_map.keys()), "strat3": ss3, "boost3": sbv3, "wager3": sw3, "cap3_val": scap3, "maxpay3": smax3,
+            "book1": sb1, "strat1": ss1, "boost1": sbv1, "wager1": sw1, "cap1_val": scap1,
+            "book2": sb2 if sb2 else list(book_map.keys()), "strat2": ss2, "boost2": sbv2, "wager2": sw2, "cap2_val": scap2,
+            "book3": sb3 if sb3 else list(book_map.keys()), "strat3": ss3, "boost3": sbv3, "wager3": sw3, "cap3_val": scap3,
             "leagues": active_leagues,
             "lookahead_end_date": lookahead_end
         }
