@@ -88,6 +88,9 @@ def run_promo_scan(p):
     lookahead_limit = now_utc + timedelta(days=5)
     all_opps = []
     
+    # Ensure we have at least one booster value to process loop logic smoothly
+    boosters = p['vals'] if p['vals'] else [0]
+    
     with st.status(f"Scanning {p['book']}...", expanded=False) as status:
         for sport_label in p['sports']:
             sport_key = sports_map[sport_label]
@@ -118,7 +121,7 @@ def run_promo_scan(p):
                     all_outcomes = list(set([o['name'] for o in sample_market]))
 
                     # ----------------------------------------------------
-                    # CASE 1: SOCCER / 3-WAY MARKET (Different Books for All 3)
+                    # CASE 1: SOCCER / 3-WAY MARKET
                     # ----------------------------------------------------
                     if len(all_outcomes) == 3:
                         for s in source_odds:
@@ -126,19 +129,16 @@ def run_promo_scan(p):
                             if len(hedge_teams) != 2: continue
                             
                             team_h1, team_h2 = hedge_teams[0], hedge_teams[1]
-                            
                             eligible_h1 = [h for h in hedge_odds if h['team'] == team_h1]
                             eligible_h2 = [h for h in hedge_odds if h['team'] == team_h2]
                             
                             if not eligible_h1 or not eligible_h2: continue
                             
-                            # Find the absolute best unique pair where h1_book != h2_book
                             best_combination = None
                             max_profit_for_combo = -999999
 
                             for h1 in eligible_h1:
                                 for h2 in eligible_h2:
-                                    # STRICT REQUIREMENT: Books must be different from each other
                                     if h1['book_key'] == h2['book_key']:
                                         continue
                                     
@@ -146,33 +146,36 @@ def run_promo_scan(p):
                                     hm1 = get_multiplier(h1['price'])
                                     hm2 = get_multiplier(h2['price'])
 
-                                    if p['strat'] == "Profit Boost (%)":
-                                        bsm = sm * (1 + (p['val']/100))
-                                        target_payout = p['wager'] * (1 + bsm)
-                                        raw_h1 = target_payout / (1 + hm1)
-                                        raw_h2 = target_payout / (1 + hm2)
-                                        exact_profit = target_payout - p['wager'] - raw_h1 - raw_h2
-                                        
-                                    elif p['strat'] == "Bonus Bet":
-                                        target_payout = p['wager'] * sm
-                                        raw_h1 = target_payout / (1 + hm1)
-                                        raw_h2 = target_payout / (1 + hm2)
-                                        exact_profit = target_payout - raw_h1 - raw_h2
-                                        
-                                    else:  # No-Sweat Bet
-                                        mc = 0.65
-                                        target_payout = p['wager'] * (1 + sm)
-                                        raw_h1 = (target_payout - (p['wager'] * mc)) / (1 + hm1)
-                                        raw_h2 = (target_payout - (p['wager'] * mc)) / (1 + hm2)
-                                        exact_profit = target_payout - p['wager'] - raw_h1 - raw_h2
+                                    # Evaluate every booster to find the absolute best match
+                                    for b_val in boosters:
+                                        if p['strat'] == "Profit Boost (%)":
+                                            bsm = sm * (1 + (b_val / 100))
+                                            target_payout = p['wager'] * (1 + bsm)
+                                            raw_h1 = target_payout / (1 + hm1)
+                                            raw_h2 = target_payout / (1 + hm2)
+                                            exact_profit = target_payout - p['wager'] - raw_h1 - raw_h2
+                                            
+                                        elif p['strat'] == "Bonus Bet":
+                                            target_payout = p['wager'] * sm
+                                            raw_h1 = target_payout / (1 + hm1)
+                                            raw_h2 = target_payout / (1 + hm2)
+                                            exact_profit = target_payout - raw_h1 - raw_h2
+                                            
+                                        else:  # No-Sweat Bet
+                                            mc = 0.65
+                                            target_payout = p['wager'] * (1 + sm)
+                                            raw_h1 = (target_payout - (p['wager'] * mc)) / (1 + hm1)
+                                            raw_h2 = (target_payout - (p['wager'] * mc)) / (1 + hm2)
+                                            exact_profit = target_payout - p['wager'] - raw_h1 - raw_h2
 
-                                    if exact_profit > max_profit_for_combo:
-                                        max_profit_for_combo = exact_profit
-                                        best_combination = {
-                                            "h1": h1, "h2": h2, 
-                                            "raw_h1": raw_h1, "raw_h2": raw_h2, 
-                                            "profit": exact_profit
-                                        }
+                                        if exact_profit > max_profit_for_combo:
+                                            max_profit_for_combo = exact_profit
+                                            best_combination = {
+                                                "h1": h1, "h2": h2, 
+                                                "raw_h1": raw_h1, "raw_h2": raw_h2, 
+                                                "profit": exact_profit,
+                                                "used_boost": b_val
+                                            }
 
                             if best_combination and best_combination['profit'] > -10.0:
                                 b_combo = best_combination
@@ -184,13 +187,14 @@ def run_promo_scan(p):
                                     "exact_profit": b_combo['profit'],
                                     "wager": p['wager'],
                                     "strat": p['strat'],
+                                    "used_boost": b_combo['used_boost'],
                                     "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
                                     "h1_book": b_combo['h1']['book'], "h1_team": b_combo['h1']['team'], "h1_price": b_combo['h1']['price'], "exact_hedge1": b_combo['raw_h1'],
                                     "h2_book": b_combo['h2']['book'], "h2_team": b_combo['h2']['team'], "h2_price": b_combo['h2']['price'], "exact_hedge2": b_combo['raw_h2'],
                                 })
 
                     # ----------------------------------------------------
-                    # CASE 2: STANDARD 2-WAY MARKET (WNBA, MLB)
+                    # CASE 2: STANDARD 2-WAY MARKET
                     # ----------------------------------------------------
                     elif len(all_outcomes) == 2:
                         for s in source_odds:
@@ -205,36 +209,44 @@ def run_promo_scan(p):
                                 sm = get_multiplier(s['price'])
                                 hm = get_multiplier(best_h['price'])
                                 
-                                if p['strat'] == "Profit Boost (%)":
-                                    bsm = sm * (1 + (p['val']/100))
-                                    target_payout = p['wager'] * (1 + bsm)
-                                    raw_h = target_payout / (1 + hm)
-                                    exact_profit = target_payout - p['wager'] - raw_h
-                                    
-                                elif p['strat'] == "Bonus Bet":
-                                    target_payout = p['wager'] * sm
-                                    raw_h = target_payout / (1 + hm)
-                                    exact_profit = target_payout - raw_h
-                                    
-                                else:  # No-Sweat Bet
-                                    mc = 0.65
-                                    target_payout = p['wager'] * (1 + sm)
-                                    raw_h = (target_payout - (p['wager'] * mc)) / (1 + hm)
-                                    exact_profit = target_payout - p['wager'] - raw_h
+                                best_boost_profit = -999999
+                                best_boost_record = {}
+                                
+                                for b_val in boosters:
+                                    if p['strat'] == "Profit Boost (%)":
+                                        bsm = sm * (1 + (b_val / 100))
+                                        target_payout = p['wager'] * (1 + bsm)
+                                        raw_h = target_payout / (1 + hm)
+                                        exact_profit = target_payout - p['wager'] - raw_h
+                                        
+                                    elif p['strat'] == "Bonus Bet":
+                                        target_payout = p['wager'] * sm
+                                        raw_h = target_payout / (1 + hm)
+                                        exact_profit = target_payout - raw_h
+                                        
+                                    else:  # No-Sweat Bet
+                                        mc = 0.65
+                                        target_payout = p['wager'] * (1 + sm)
+                                        raw_h = (target_payout - (p['wager'] * mc)) / (1 + hm)
+                                        exact_profit = target_payout - p['wager'] - raw_h
+                                        
+                                    if exact_profit > best_boost_profit:
+                                        best_boost_profit = exact_profit
+                                        best_boost_record = {"profit": exact_profit, "hedge": raw_h, "used_boost": b_val}
 
-                                if exact_profit > -10.0:
+                                if best_boost_profit > -10.0:
                                     all_opps.append({
                                         "game": f"{game.get('away_team', 'Away Team')} vs {game.get('home_team', 'Home Team')}",
                                         "sport": sport_label,
                                         "market_type": "2-way",
                                         "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
-                                        "exact_profit": exact_profit,
-                                        "exact_hedge": raw_h,
+                                        "exact_profit": best_boost_record['profit'],
+                                        "exact_hedge": best_boost_record['hedge'],
                                         "s_team": s['team'], "s_book": s['book'], "s_price": s['price'],
                                         "h_book": best_h['book'], "h_team": best_h['team'], "h_price": best_h['price'],
                                         "wager": p['wager'],
                                         "strat": p['strat'],
-                                        "promo_val": p['val']
+                                        "used_boost": best_boost_record['used_boost']
                                     })
             else:
                 st.error(f"Could not fetch data for {sport_label}")
@@ -249,11 +261,12 @@ def display_results(all_opps, p):
     if not sorted_opps:
         st.warning(f"No profitable matches found for {p['book']}.")
     else:
-        # Sliced to 15 elements to display the top 15 ranks
         for i, op in enumerate(sorted_opps[:15]):
             if op['strat'] == "Bonus Bet":
                 conv_rate = (op['exact_profit'] / op['wager']) * 100
                 conv_str = f" | {conv_rate:.1f}% Conversion"
+            elif op['strat'] == "Profit Boost (%)" and op.get('used_boost', 0) > 0:
+                conv_str = f" | Using {op['used_boost']}% Boost"
             else:
                 conv_str = ""
 
@@ -306,7 +319,8 @@ with st.expander("Promo Configuration", expanded=True):
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=0.0, value=0.0, step=1.0)
-            v = st.number_input("Boost % / Bonus Val", min_value=0, value=0)
+            # Text input instead of number field to take comma-separated multi-booster values
+            v_input = st.text_input("Profit Boosters (e.g. 10, 25, 50)", value="0")
         with col3:
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
         with col4:
@@ -318,12 +332,18 @@ with st.expander("Promo Configuration", expanded=True):
         with btn_col2:
             quick_scan = st.form_submit_button("Quick Scan", use_container_width=True)
 
+# Process comma-separated entry safely into Python list of integers
+try:
+    parsed_vals = [int(x.strip()) for x in v_input.split(",") if x.strip().isdigit()]
+except Exception:
+    parsed_vals = [0]
+
 # --- ACTIONS ---
 if quick_scan:
     if not sp: st.error("Select at least one sport.")
     elif w <= 0: st.error("Enter a wager amount.")
     else:
-        temp_p = {"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb}
+        temp_p = {"book": b, "strat": s, "wager": w, "vals": parsed_vals, "sports": sp, "hedge_books": hb}
         results = run_promo_scan(temp_p)
         display_results(results, temp_p)
 
@@ -331,7 +351,7 @@ if add_to_q:
     if not sp: st.error("Select at least one sport.")
     elif w <= 0: st.error("Enter a wager amount.")
     else:
-        st.session_state.promos.append({"book": b, "strat": s, "wager": w, "val": v, "sports": sp, "hedge_books": hb})
+        st.session_state.promos.append({"book": b, "strat": s, "wager": w, "vals": parsed_vals, "sports": sp, "hedge_books": hb})
 
 if st.session_state.promos:
     st.subheader("Scan Queue")
@@ -339,7 +359,8 @@ if st.session_state.promos:
         q_col1, q_col2 = st.columns([9.2, 0.8])
         with q_col1:
             hedge_label = ", ".join(p['hedge_books']) if p['hedge_books'] else "ALL"
-            st.info(f"**{p['book'].upper()}** vs **{hedge_label}** | {p['strat']} | ${p['wager']} | {p['val']}% | {', '.join(p['sports'])}")
+            boosts_label = "/".join([f"{x}%" for x in p['vals']])
+            st.info(f"**{p['book'].upper()}** vs **{hedge_label}** | {p['strat']} | ${p['wager']} | Boosts: {boosts_label} | {', '.join(p['sports'])}")
         with q_col2:
             if st.button("✕", key=f"rm_{i}"):
                 st.session_state.promos.pop(i)
