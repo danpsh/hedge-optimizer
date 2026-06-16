@@ -146,7 +146,6 @@ def run_promo_scan(p):
                                         m2 = get_multiplier(o2['price']) * (1 + (p['boost_val'] / 100)) if o2['book_key'] == source_book_key else get_multiplier(o2['price'])
                                         m3 = get_multiplier(o3['price']) * (1 + (p['boost_val'] / 100)) if o3['book_key'] == source_book_key else get_multiplier(o3['price'])
                                         
-                                        # Assume Outcome 1 is our anchor wager point for calculations
                                         target_pay = p['wager'] * (1 + m1)
                                         h2_stake = target_pay / (1 + m2)
                                         h3_stake = target_pay / (1 + m3)
@@ -229,7 +228,7 @@ def run_promo_scan(p):
     return all_opps
 
 
-# --- ENGINE: TRIPLE SOURCE BOOK 3-WAY SOCCER SCANNER ---
+# --- ENGINE: MULTI-BOOK SOCCER SCANNER WITH PARTIAL PROMO OVERRIDE CASH SPLITTING ---
 def run_multi_book_soccer_scan(sc):
     book1_key = book_map[sc['book1']]
     book2_key = book_map[sc['book2']] if sc['use_two_books'] else None
@@ -274,56 +273,66 @@ def run_multi_book_soccer_scan(sc):
                             
                             if not b1_match and not b2_match and not b3_match: continue
 
-                            # --- OUTCOME 1 MATHEMATICS ---
+                            # 1. Calculate Book 1 Wager Profile (Promo vs Cash Overrides)
+                            w1_total = sc['wager1']
+                            w1_promo = w1_total
+                            w1_cash = 0.0
+                            if b1_match and sc['use_cap1'] and sc['cap1_val'] > 0 and w1_total > sc['cap1_val']:
+                                w1_promo = sc['cap1_val']
+                                w1_cash = w1_total - w1_promo
+
                             m1_raw = get_multiplier(o1['price'])
-                            if b1_match:
-                                if sc['strat1'] == "Profit Boost (%)":
-                                    m1 = m1_raw * (1 + (sc['boost1'] / 100))
-                                    target_pay = sc['wager1'] * (1 + m1)
-                                    outlay1 = sc['wager1']
-                                elif sc['strat1'] == "Bonus Bet":
-                                    target_pay = sc['wager1'] * m1_raw
-                                    outlay1 = 0
-                                else: # No Sweat
-                                    target_pay = sc['wager1'] * (1 + m1_raw)
-                                    outlay1 = sc['wager1']
-                            else:
-                                target_pay = sc['wager1'] * (1 + m1_raw)
-                                outlay1 = sc['wager1']
+                            m1_boosted = m1_raw * (1 + (sc['boost1'] / 100)) if (b1_match and sc['strat1'] == "Profit Boost (%)") else m1_raw
 
-                            # --- OUTCOME 2 MATHEMATICS ---
+                            # Establish Payout Target for Outcome 1
+                            if b1_match and sc['strat1'] == "Bonus Bet":
+                                target_pay = (w1_promo * m1_boosted) + (w1_cash * (1 + m1_raw))
+                                outlay1 = w1_cash
+                            else:
+                                target_pay = (w1_promo * (1 + m1_boosted)) + (w1_cash * (1 + m1_raw))
+                                outlay1 = w1_total
+
+                            # 2. Calculate Book 2 Multiplier Multi-tracking
                             m2_raw = get_multiplier(o2['price'])
-                            if b2_match:
-                                if sc['strat2'] == "Profit Boost (%)":
-                                    m2 = m2_raw * (1 + (sc['boost2'] / 100))
-                                    h2_stake = target_pay / (1 + m2)
-                                    outlay2 = h2_stake
-                                elif sc['strat2'] == "Bonus Bet":
-                                    h2_stake = target_pay / m2_raw
-                                    outlay2 = 0
-                                else: # No Sweat
-                                    h2_stake = target_pay / (1 + m2_raw) 
-                                    outlay2 = h2_stake
-                            else:
-                                h2_stake = target_pay / (1 + m2_raw)
-                                outlay2 = h2_stake
+                            m2_boosted = m2_raw * (1 + (sc['boost2'] / 100)) if (b2_match and sc['strat2'] == "Profit Boost (%)") else m2_raw
 
-                            # --- OUTCOME 3 MATHEMATICS ---
-                            m3_raw = get_multiplier(o3['price'])
-                            if b3_match:
-                                if sc['strat3'] == "Profit Boost (%)":
-                                    m3 = m3_raw * (1 + (sc['boost3'] / 100))
-                                    h3_stake = target_pay / (1 + m3)
-                                    outlay3 = h3_stake
-                                elif sc['strat3'] == "Bonus Bet":
-                                    h3_stake = target_pay / m3_raw
-                                    outlay3 = 0
-                                else: # No Sweat
-                                    h3_stake = target_pay / (1 + m3_raw)
-                                    outlay3 = h3_stake
+                            # Determine Book 2 configuration profile paths
+                            if b2_match:
+                                div_promo = m2_boosted if sc['strat2'] == "Bonus Bet" else (1 + m2_boosted)
+                                div_cash = 1 + m2_raw
+                                
+                                if sc['use_cap2'] and sc['cap2_val'] > 0:
+                                    max_promo_payout = sc['cap2_val'] * div_promo
+                                    if target_pay > max_promo_payout:
+                                        # Split required: Maximum allocation to promo, rest goes to cash
+                                        w2_promo = sc['cap2_val']
+                                        remaining_payout_needed = target_pay - max_promo_payout
+                                        w2_cash = remaining_payout_needed / div_cash
+                                    else:
+                                        w2_promo = target_pay / div_promo
+                                        w2_cash = 0.0
+                                else:
+                                    w2_promo = target_pay / div_promo
+                                    w2_cash = 0.0
+                                
+                                w2_total = w2_promo + w2_cash
+                                outlay2 = w2_cash if sc['strat2'] == "Bonus Bet" else w2_total
                             else:
-                                h3_stake = target_pay / (1 + m3_raw)
-                                outlay3 = h3_stake
+                                w2_total = target_pay / (1 + m2_raw)
+                                w2_promo, w2_cash = 0.0, 0.0
+                                outlay2 = w2_total
+
+                            # 3. Calculate Book 3 Wager Profile
+                            m3_raw = get_multiplier(o3['price'])
+                            m3_boosted = m3_raw * (1 + (sc['boost3'] / 100)) if (b3_match and sc['strat3'] == "Profit Boost (%)") else m3_raw
+
+                            if b3_match:
+                                div_p3 = m3_boosted if sc['strat3'] == "Bonus Bet" else (1 + m3_boosted)
+                                w3_total = target_pay / div_p3
+                                outlay3 = 0.0 if sc['strat3'] == "Bonus Bet" else w3_total
+                            else:
+                                w3_total = target_pay / (1 + m3_raw)
+                                outlay3 = w3_total
 
                             net_profit = target_pay - (outlay1 + outlay2 + outlay3)
 
@@ -331,9 +340,9 @@ def run_multi_book_soccer_scan(sc):
                                 "game": f"{game.get('away_team')} vs {game.get('home_team')}",
                                 "time": (commence_time - timedelta(hours=6)).strftime("%m/%d %I:%M %p"),
                                 "net_profit": net_profit,
-                                "o1_book": o1['book_title'], "o1_team": o1['team'], "o1_price": o1['price'], "o1_wager": sc['wager1'], "o1_strat": sc['strat1'], "o1_boost": sc['boost1'] if b1_match and sc['strat1'] == "Profit Boost (%)" else 0,
-                                "o2_book": o2['book_title'], "o2_team": o2['team'], "o2_price": o2['price'], "o2_wager": h2_stake, "o2_strat": sc['strat2'] if b2_match else "Straight", "o2_boost": sc['boost2'] if b2_match and sc['strat2'] == "Profit Boost (%)" else 0,
-                                "o3_book": o3['book_title'], "o3_team": o3['team'], "o3_price": o3['price'], "o3_wager": h3_stake, "o3_strat": sc['strat3'] if b3_match else "Straight", "o3_boost": sc['boost3'] if b3_match and sc['strat3'] == "Profit Boost (%)" else 0
+                                "o1_book": o1['book_title'], "o1_team": o1['team'], "o1_price": o1['price'], "o1_wager": w1_total, "o1_promo": w1_promo, "o1_cash": w1_cash, "o1_strat": sc['strat1'], "o1_boost": sc['boost1'] if b1_match and sc['strat1'] == "Profit Boost (%)" else 0,
+                                "o2_book": o2['book_title'], "o2_team": o2['team'], "o2_price": o2['price'], "o2_wager": w2_total, "o2_promo": w2_promo, "o2_cash": w2_cash, "o2_strat": sc['strat2'] if b2_match else "Straight", "o2_boost": sc['boost2'] if b2_match and sc['strat2'] == "Profit Boost (%)" else 0,
+                                "o3_book": o3['book_title'], "o3_team": o3['team'], "o3_price": o3['price'], "o3_wager": w3_total, "o3_strat": sc['strat3'] if b3_match else "Straight", "o3_boost": sc['boost3'] if b3_match and sc['strat3'] == "Profit Boost (%)" else 0
                             })
         status.update(label="Soccer Engine Optimization Complete", state="complete")
     return soccer_opps
@@ -436,7 +445,7 @@ def display_results(all_opps, p):
         st.warning(f"No profitable matches found.")
     else:
         for i, op in enumerate(sorted_opps[:15]):
-            conv_str = f" | Using {op['used_boost']}% Boost" if op.get('used_boost', 0) > 0 else ""
+            conv_str = f" | Using {op['used_boost']}% Boost" if op.get('market_type') == "2-way" and op.get('used_boost', 0) > 0 else ""
             header_title = f"RANK {i+1} | {op['time']} | {op['game']}{conv_str} | Profit: ${op['exact_profit']:.2f}"
             
             with st.expander(header_title):
@@ -463,14 +472,19 @@ def display_soccer_results(opps):
             with st.expander(header):
                 cl1, cl2, cl3 = st.columns(3)
                 
-                b1_str = f" ({op['o1_strat']} +{op['o1_boost']}% 🎉)" if op['o1_boost'] > 0 else f" ({op['o1_strat']})"
-                with cl1: st.info(f"**OUTCOME A**\n\n**{op['o1_book']}**\n*{b1_str}*\n\nBet: **${op['o1_wager']:.2f}**\n\n{op['o1_team']} @ {op['o1_price']:+}")
+                # Book 1 Layout with split tracking metrics
+                with cl1:
+                    b1_str = f" ({op['o1_strat']} +{op['o1_boost']}% 🎉)" if op['o1_boost'] > 0 else f" ({op['o1_strat']})"
+                    st.info(f"**OUTCOME A**\n\n**{op['o1_book']}**\n*{b1_str}*\n\nTotal Bet: **${op['o1_wager']:.2f}**\n\n↳ Promo Part: `${op['o1_promo']:.2f}`\n\n↳ Cash Override: `${op['o1_cash']:.2f}`\n\n{op['o1_team']} @ {op['o1_price']:+}")
                 
-                b2_str = f" ({op['o2_strat']} +{op['o2_boost']}% 🎉)" if op['o2_boost'] > 0 else f" ({op['o2_strat']})"
-                with cl2: st.success(f"**OUTCOME B**\n\n**{op['o2_book']}**\n*{b2_str}*\n\nBet: **${op['o2_wager']:.2f}**\n\n{op['o2_team']} @ {op['o2_price']:+}")
+                # Book 2 Layout with split tracking metrics
+                with cl2:
+                    b2_str = f" ({op['o2_strat']} +{op['o2_boost']}% 🎉)" if op['o2_boost'] > 0 else f" ({op['o2_strat']})"
+                    st.success(f"**OUTCOME B**\n\n**{op['o2_book']}**\n*{b2_str}*\n\nTotal Bet: **${op['o2_wager']:.2f}**\n\n↳ Promo Part: `${op['o2_promo']:.2f}`\n\n↳ Cash Override: `${op['o2_cash']:.2f}`\n\n{op['o2_team']} @ {op['o2_price']:+}")
                 
-                b3_str = f" ({op['o3_strat']} +{op['o3_boost']}% 🎉)" if op['o3_boost'] > 0 else f" ({op['o3_strat']})"
-                with cl3: st.warning(f"**OUTCOME C**\n\n**{op['o3_book']}**\n*{b3_str}*\n\nBet: **${op['o3_wager']:.2f}**\n\n{op['o3_team']} @ {op['o3_price']:+}")
+                # Book 3 Layout (Standard)
+                with cl3:
+                    st.warning(f"**OUTCOME C**\n\n**{op['o3_book']}**\n*Straight Cash*\n\nBet: **${op['o3_wager']:.2f}**\n\n{op['o3_team']} @ {op['o3_price']:+}")
                 
                 st.metric("Risk-Free Profit Generated", f"${op['net_profit']:.2f}")
 
@@ -585,7 +599,7 @@ st.write("")
 st.divider()
 
 # ========================================================
-# MIDDLE MODULE: MULTI-BOOK SOCCER ENGINE (UPGRADED TO 3 BOOKS)
+# MIDDLE MODULE: MULTI-BOOK SOCCER ENGINE (WITH ADVANCED PARTIAL CASH SPLITTING)
 # ========================================================
 st.markdown("### ⚽ Multi-Book Soccer Booster Engine (3-Way Markets)")
 with st.expander("Configure Multi-Source Book Soccer Boost Options", expanded=True):
@@ -594,9 +608,12 @@ with st.expander("Configure Multi-Source Book Soccer Boost Options", expanded=Tr
     with sc_c1:
         st.subheader("Book 1 Configuration")
         sb1 = st.selectbox("Primary Source Book (Outcome 1)", list(book_map.keys()), index=0, key="sb1_k")
-        sw1 = st.number_input("Primary Book Bet Size ($)", min_value=0.0, value=0.0, step=5.0, key="sw1_k")
+        sw1 = st.number_input("Primary Book Intended Size ($)", min_value=0.0, value=0.0, step=5.0, key="sw1_k")
         ss1 = st.selectbox("Book 1 Booster Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="ss1_k")
         sbo1 = st.number_input("Book 1 Boost Value (%)", min_value=0, value=0, step=5, key="sbo1_k", disabled=(ss1 != "Profit Boost (%)"))
+        
+        use_cap1 = st.checkbox("Apply strict Max Wager limit to Book 1?", value=False, key="uc1")
+        cap1_val = st.number_input("Book 1 Max Stake limit ($)", min_value=0.0, value=0.0, step=5.0, disabled=not use_cap1, key="cv1")
 
     with sc_c2:
         st.subheader("Book 2 Configuration")
@@ -604,6 +621,9 @@ with st.expander("Configure Multi-Source Book Soccer Boost Options", expanded=Tr
         sb2 = st.selectbox("Secondary Source Book (Outcome 2)", list(book_map.keys()), index=1, disabled=not use_second, key="sb2_k")
         ss2 = st.selectbox("Book 2 Booster Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, disabled=not use_second, key="ss2_k")
         sbo2 = st.number_input("Book 2 Boost Value (%)", min_value=0, value=0, step=5, disabled=(not use_second or ss2 != "Profit Boost (%)"), key="sbo2_k")
+        
+        use_cap2 = st.checkbox("Apply strict Max Wager limit to Book 2?", value=False, disabled=not use_second, key="uc2")
+        cap2_val = st.number_input("Book 2 Max Stake limit ($)", min_value=0.0, value=0.0, step=5.0, disabled=(not use_second or not use_cap2), key="cv2")
 
     with sc_c3:
         st.subheader("Book 3 Configuration")
@@ -614,11 +634,11 @@ with st.expander("Configure Multi-Source Book Soccer Boost Options", expanded=Tr
 
     if st.button("Execute Soccer Multi-Boost Optimization Scan", use_container_width=True):
         if sw1 <= 0:
-            st.error("Please enter a valid Primary Book Bet Size.")
+            st.error("Please enter a valid Primary Book Intended Size.")
         else:
             sc_payload = {
-                "book1": sb1, "wager1": sw1, "strat1": ss1, "boost1": sbo1,
-                "use_two_books": use_second, "book2": sb2, "strat2": ss2, "boost2": sbo2,
+                "book1": sb1, "wager1": sw1, "strat1": ss1, "boost1": sbo1, "use_cap1": use_cap1, "cap1_val": cap1_val,
+                "use_two_books": use_second, "book2": sb2, "strat2": ss2, "boost2": sbo2, "use_cap2": use_cap2, "cap2_val": cap2_val,
                 "use_three_books": use_three, "book3": sb3, "strat3": ss3, "boost3": sbo3
             }
             sc_results = run_multi_book_soccer_scan(sc_payload)
