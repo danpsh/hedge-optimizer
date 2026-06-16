@@ -265,7 +265,7 @@ def run_multi_book_soccer_scan(sc):
                 for o1 in odds_t1:
                     for o2 in odds_t2:
                         for o3 in odds_draw:
-                            # --- RESTORED MAPPING BINDING ---
+                            if o1['book_key'] == o2['book_key'] or o1['book_key'] == o3['book_key'] or o2['book_key'] == o3['book_key']: continue
                             if o1['book_key'] != book1_key or o2['book_key'] != book2_key or o3['book_key'] != book3_key: continue
 
                             # --- LEG 1 PROMO PROCESSING ---
@@ -282,7 +282,7 @@ def run_multi_book_soccer_scan(sc):
                             if sc['strat1'] == "Bonus Bet":
                                 target_pay = (w1_promo * m1_boosted) + (w1_cash * (1 + m1_raw))
                                 outlay1 = w1_cash
-                            else: 
+                            else: # Straight Cash or Profit Boost / No-Sweat
                                 target_pay = (w1_promo * (1 + m1_boosted)) + (w1_cash * (1 + m1_raw))
                                 outlay1 = w1_total
 
@@ -582,7 +582,7 @@ with st.expander("Complex Soccer Engine (Multi-Book Tri-Booster Router)", expand
             
         with sc2:
             st.markdown("##### Leg 2 (Outcome B)")
-            s_b2 = st.selectbox("Book 2", list(book_map.keys()), key="sb2")
+            s_b2 = st.selectbox("Book 2", [k for k in book_map.keys() if k != s_b1], key="sb2")
             s_st2 = st.selectbox("Promo 2", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], key="sst2")
             st.write(" *Stake determined dynamically based on Leg 1 payoff structural layout*")
             s_bst2 = st.number_input("Boost % (Leg 2)", min_value=0, value=0, step=5, key="sbst2")
