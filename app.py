@@ -265,7 +265,7 @@ def run_multi_book_soccer_scan(sc):
                 for o1 in odds_t1:
                     for o2 in odds_t2:
                         for o3 in odds_draw:
-                            # Safeguard logic: Ensure different outcomes don't look at the exact same physical line match setup on the same book unless expected
+                            # --- RESTORED MAPPING BINDING ---
                             if o1['book_key'] != book1_key or o2['book_key'] != book2_key or o3['book_key'] != book3_key: continue
 
                             # --- LEG 1 PROMO PROCESSING ---
@@ -582,7 +582,6 @@ with st.expander("Complex Soccer Engine (Multi-Book Tri-Booster Router)", expand
             
         with sc2:
             st.markdown("##### Leg 2 (Outcome B)")
-            # Opened list to all entries to allow any matching arrangement
             s_b2 = st.selectbox("Book 2", list(book_map.keys()), key="sb2")
             s_st2 = st.selectbox("Promo 2", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], key="sst2")
             st.write(" *Stake determined dynamically based on Leg 1 payoff structural layout*")
@@ -591,7 +590,6 @@ with st.expander("Complex Soccer Engine (Multi-Book Tri-Booster Router)", expand
             
         with sc3:
             st.markdown("##### Leg 3 (Draw)")
-            # Opened list to all entries to allow any matching arrangement
             s_b3 = st.selectbox("Book 3", list(book_map.keys()), key="sb3")
             s_st3 = st.selectbox("Promo 3", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], key="sst3")
             st.write(" *Stake determined dynamically based on Leg 1 payoff structural layout*")
