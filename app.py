@@ -300,72 +300,85 @@ def run_multi_book_soccer_scan(sc):
                                 if o1['book_key'] == o2['book_key'] or o1['book_key'] == o3['book_key'] or o2['book_key'] == o3['book_key']: continue
                                 if o1['book_key'] != book1_key or o2['book_key'] != book2_key or o3['book_key'] != book3_key: continue
 
-                                # --- LEG 1 PROMO PROCESSING ---
-                                w1_total = sc['wager1']
-                                w1_promo = w1_total
-                                w1_cash = 0.0
-                                if sc['strat1'] != "Straight Cash" and sc['cap1_val'] > 0 and w1_total > sc['cap1_val']:
-                                    w1_promo = sc['cap1_val']
-                                    w1_cash = w1_total - w1_promo
+                                # --- SHARED HELPER: compute leg payout given strategy + caps ---
+                                def leg_payout(w_total, strat, boost_pct, m_raw, cap_val, maxpay_val):
+                                    """Returns (target_payout, outlay, w_promo, w_cash) for one leg."""
+                                    mc_nosweat = 0.65
+                                    m_boosted = m_raw * (1 + boost_pct / 100) if strat == "Profit Boost (%)" else m_raw
 
+                                    # Split stake into promo + cash overflow if cap is set
+                                    if strat != "Straight Cash" and cap_val > 0 and w_total > cap_val:
+                                        w_promo = cap_val
+                                        w_cash = w_total - cap_val
+                                    else:
+                                        w_promo = w_total if strat != "Straight Cash" else 0.0
+                                        w_cash = 0.0 if strat != "Straight Cash" else w_total
+
+                                    if strat == "Bonus Bet":
+                                        raw_pay = (w_promo * m_boosted) + (w_cash * (1 + m_raw))
+                                        outlay = w_cash
+                                    elif strat == "No-Sweat Bet":
+                                        raw_pay = (w_promo * (1 + m_raw)) + (w_cash * (1 + m_raw))
+                                        outlay = w_total
+                                    else:  # Straight Cash or Profit Boost
+                                        raw_pay = (w_promo * (1 + m_boosted)) + (w_cash * (1 + m_raw))
+                                        outlay = w_total
+
+                                    # Apply max payout cap if set
+                                    pay = min(raw_pay, maxpay_val) if maxpay_val > 0 else raw_pay
+                                    return pay, outlay, w_promo, w_cash
+
+                                # --- LEG 1 (drives target payout) ---
                                 m1_raw = get_multiplier(o1['price'])
-                                m1_boosted = m1_raw * (1 + (sc['boost1'] / 100)) if sc['strat1'] == "Profit Boost (%)" else m1_raw
+                                target_pay, outlay1, w1_promo, w1_cash = leg_payout(
+                                    sc['wager1'], sc['strat1'], sc['boost1'], m1_raw, sc['cap1_val'], sc['maxpay1']
+                                )
+                                w1_total = sc['wager1']
 
-                                if sc['strat1'] == "Bonus Bet":
-                                    target_pay = (w1_promo * m1_boosted) + (w1_cash * (1 + m1_raw))
-                                    outlay1 = w1_cash
-                                else: # Straight Cash or Profit Boost / No-Sweat
-                                    target_pay = (w1_promo * (1 + m1_boosted)) + (w1_cash * (1 + m1_raw))
-                                    outlay1 = w1_total
-
-                                # --- LEG 2 PROMO PROCESSING (WITH ARB SPLITTING) ---
+                                # --- LEG 2 (arb-split to match target_pay) ---
                                 m2_raw = get_multiplier(o2['price'])
-                                m2_boosted = m2_raw * (1 + (sc['boost2'] / 100)) if sc['strat2'] == "Profit Boost (%)" else m2_raw
-
+                                m2_boosted = m2_raw * (1 + sc['boost2'] / 100) if sc['strat2'] == "Profit Boost (%)" else m2_raw
                                 div_promo2 = m2_boosted if sc['strat2'] == "Bonus Bet" else (1 + m2_boosted)
                                 div_cash2 = 1 + m2_raw
 
+                                effective_target2 = min(target_pay, sc['maxpay2']) if sc['maxpay2'] > 0 else target_pay
+
                                 if sc['strat2'] != "Straight Cash" and sc['cap2_val'] > 0:
-                                    max_promo_payout2 = sc['cap2_val'] * div_promo2
-                                    if target_pay > max_promo_payout2:
+                                    max_promo_pay2 = sc['cap2_val'] * div_promo2
+                                    if effective_target2 > max_promo_pay2:
                                         w2_promo = sc['cap2_val']
-                                        w2_cash = (target_pay - max_promo_payout2) / div_cash2
+                                        w2_cash = (effective_target2 - max_promo_pay2) / div_cash2
                                     else:
-                                        w2_promo = target_pay / div_promo2
+                                        w2_promo = effective_target2 / div_promo2
                                         w2_cash = 0.0
+                                elif sc['strat2'] == "Straight Cash":
+                                    w2_promo, w2_cash = 0.0, effective_target2 / div_cash2
                                 else:
-                                    if sc['strat2'] == "Straight Cash":
-                                        w2_promo = 0.0
-                                        w2_cash = target_pay / div_cash2
-                                    else:
-                                        w2_promo = target_pay / div_promo2
-                                        w2_cash = 0.0
+                                    w2_promo, w2_cash = effective_target2 / div_promo2, 0.0
 
                                 w2_total = w2_promo + w2_cash
                                 outlay2 = w2_cash if sc['strat2'] == "Bonus Bet" else w2_total
 
-                                # --- LEG 3 PROMO PROCESSING (WITH ARB SPLITTING) ---
+                                # --- LEG 3 (arb-split to match target_pay) ---
                                 m3_raw = get_multiplier(o3['price'])
-                                m3_boosted = m3_raw * (1 + (sc['boost3'] / 100)) if sc['strat3'] == "Profit Boost (%)" else m3_raw
-
+                                m3_boosted = m3_raw * (1 + sc['boost3'] / 100) if sc['strat3'] == "Profit Boost (%)" else m3_raw
                                 div_promo3 = m3_boosted if sc['strat3'] == "Bonus Bet" else (1 + m3_boosted)
                                 div_cash3 = 1 + m3_raw
 
+                                effective_target3 = min(target_pay, sc['maxpay3']) if sc['maxpay3'] > 0 else target_pay
+
                                 if sc['strat3'] != "Straight Cash" and sc['cap3_val'] > 0:
-                                    max_promo_payout3 = sc['cap3_val'] * div_promo3
-                                    if target_pay > max_promo_payout3:
+                                    max_promo_pay3 = sc['cap3_val'] * div_promo3
+                                    if effective_target3 > max_promo_pay3:
                                         w3_promo = sc['cap3_val']
-                                        w3_cash = (target_pay - max_promo_payout3) / div_cash3
+                                        w3_cash = (effective_target3 - max_promo_pay3) / div_cash3
                                     else:
-                                        w3_promo = target_pay / div_promo3
+                                        w3_promo = effective_target3 / div_promo3
                                         w3_cash = 0.0
+                                elif sc['strat3'] == "Straight Cash":
+                                    w3_promo, w3_cash = 0.0, effective_target3 / div_cash3
                                 else:
-                                    if sc['strat3'] == "Straight Cash":
-                                        w3_promo = 0.0
-                                        w3_cash = target_pay / div_cash3
-                                    else:
-                                        w3_promo = target_pay / div_promo3
-                                        w3_cash = 0.0
+                                    w3_promo, w3_cash = effective_target3 / div_promo3, 0.0
 
                                 w3_total = w3_promo + w3_cash
                                 outlay3 = w3_cash if sc['strat3'] == "Bonus Bet" else w3_total
@@ -632,50 +645,54 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
             st.rerun()
 
     with st.form("soccer_form"):
-        # --- LOOK-AHEAD FILTER ---
-        la_col1, la_col2 = st.columns([1, 3])
-        with la_col1:
-            la_mode = st.radio("Look-Ahead Mode", ["Days Ahead", "Pick a Date"], horizontal=True)
-        with la_col2:
+        # --- LOOK-AHEAD FILTER (slider only) ---
+        with st.container(border=True):
             today = datetime.now().date()
-            if la_mode == "Days Ahead":
-                la_days = st.slider("Days Ahead", min_value=1, max_value=14, value=3, help="Include games up to this many days from today")
-                lookahead_end = today + timedelta(days=la_days - 1)
-                st.caption(f"📅 Scanning **{la_days} day{'s' if la_days > 1 else ''}** — through **{lookahead_end.strftime('%b %d, %Y')}**")
-            else:
-                lookahead_end = st.date_input("End Date", value=today + timedelta(days=2), min_value=today, max_value=today + timedelta(days=90))
-                delta = (lookahead_end - today).days + 1
-                st.caption(f"📅 Scanning **{delta} day{'s' if delta > 1 else ''}** — through **{lookahead_end.strftime('%b %d, %Y')}**")
+            la_days = st.slider("📅 Look-Ahead Window (Days)", min_value=1, max_value=14, value=3,
+                                help="Include games up to this many days from today")
+            lookahead_end = today + timedelta(days=la_days - 1)
+            st.caption(f"Scanning **{la_days} day{'s' if la_days > 1 else ''}** — today through **{lookahead_end.strftime('%b %d, %Y')}**")
+
         st.divider()
+
+        # --- LEG COLUMNS ---
         sc1, sc2, sc3 = st.columns(3)
         with sc1:
-            st.subheader("Leg 1 (Outcome A)")
-            sb1 = st.selectbox("Book Leg 1", list(book_map.keys()), index=0)
-            ss1 = st.selectbox("Type Leg 1", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], index=0)
-            sbv1 = st.number_input("Boost % Leg 1", min_value=0, value=0, step=5)
-            sw1 = st.number_input("Planned Stake Leg 1 ($)", min_value=0.0, value=50.0, step=5.0)
-            scap1 = st.number_input("Promo Cap Value Leg 1 ($)", min_value=0.0, value=0.0, help="0 means no cap")
+            with st.container(border=True):
+                st.subheader("Leg 1 (Outcome A)")
+                sb1 = st.selectbox("Book", list(book_map.keys()), index=0, key="sc_book1")
+                ss1 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type1")
+                sbv1 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost1", disabled=(ss1 != "Profit Boost (%)"))
+                sw1 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake1")
+                scap1 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap1")
+                smax1 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay1")
         with sc2:
-            st.subheader("Leg 2 (Outcome B)")
-            sb2 = st.selectbox("Book Leg 2", list(book_map.keys()), index=1)
-            ss2 = st.selectbox("Type Leg 2", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], index=0)
-            sbv2 = st.number_input("Boost % Leg 2", min_value=0, value=0, step=5)
-            scap2 = st.number_input("Promo Cap Value Leg 2 ($)", min_value=0.0, value=0.0)
+            with st.container(border=True):
+                st.subheader("Leg 2 (Outcome B)")
+                sb2 = st.selectbox("Book", list(book_map.keys()), index=1, key="sc_book2")
+                ss2 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type2")
+                sbv2 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost2", disabled=(ss2 != "Profit Boost (%)"))
+                sw2 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake2")
+                scap2 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap2")
+                smax2 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay2")
         with sc3:
-            st.subheader("Leg 3 (Draw)")
-            sb3 = st.selectbox("Book Leg 3", list(book_map.keys()), index=2)
-            ss3 = st.selectbox("Type Leg 3", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], index=0)
-            sbv3 = st.number_input("Boost % Leg 3", min_value=0, value=0, step=5)
-            scap3 = st.number_input("Promo Cap Value Leg 3 ($)", min_value=0.0, value=0.0)
-            
+            with st.container(border=True):
+                st.subheader("Leg 3 (Draw)")
+                sb3 = st.selectbox("Book", list(book_map.keys()), index=2, key="sc_book3")
+                ss3 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type3")
+                sbv3 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost3", disabled=(ss3 != "Profit Boost (%)"))
+                sw3 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake3")
+                scap3 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap3")
+                smax3 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay3")
+
         soccer_submit = st.form_submit_button("Optimize Complex Soccer Matrix")
-        
+
     if soccer_submit:
         active_leagues = selected_leagues if selected_leagues else ALL_SOCCER_LEAGUES
         soccer_config = {
-            "book1": sb1, "strat1": ss1, "boost1": sbv1, "wager1": sw1, "cap1_val": scap1,
-            "book2": sb2, "strat2": ss2, "boost2": sbv2, "cap2_val": scap2,
-            "book3": sb3, "strat3": ss3, "boost3": sbv3, "cap3_val": scap3,
+            "book1": sb1, "strat1": ss1, "boost1": sbv1, "wager1": sw1, "cap1_val": scap1, "maxpay1": smax1,
+            "book2": sb2, "strat2": ss2, "boost2": sbv2, "wager2": sw2, "cap2_val": scap2, "maxpay2": smax2,
+            "book3": sb3, "strat3": ss3, "boost3": sbv3, "wager3": sw3, "cap3_val": scap3, "maxpay3": smax3,
             "leagues": active_leagues,
             "lookahead_end_date": lookahead_end
         }
