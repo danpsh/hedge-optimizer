@@ -577,7 +577,7 @@ def display_soccer_results(opps):
 
 def display_bet_get_results(opps, bg):
     st.markdown(f"<div class='betget-header'><h3>Bet and Get Engine — {bg['book']}</h3></div>", unsafe_allow_html=True)
-    sorted_opps = sorted(opps, key=lambda x: x['qualifying_loss'], reverse=False) 
+    sorted_opps = sorted(opps, key=lambda x: x['net_value'], reverse=True) 
 
     if not sorted_opps:
         st.warning("No tight lines found for qualification.")
