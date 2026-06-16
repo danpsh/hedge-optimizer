@@ -543,89 +543,144 @@ with st.expander("Main Boost Engine", expanded=True):
         with col1:
             b = st.selectbox("Source Book", list(book_map.keys()))
             s = st.selectbox("Promo Type", ["Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"])
+            main_boost_val = st.number_input("Boost Value (%)", min_value=0, value=0, step=5, help="Only applies if Promo Type is set to Profit Boost (%)", disabled=(s != "Profit Boost (%)"))
         with col2:
             w = st.number_input("Wager Amount ($)", min_value=0.0, value=0.0, step=5.0)
-            main_boost_val = st.number_input("Boost Value (%)", min_value=0, value=0, step=5, help="Only applies if Promo Type is set to Profit Boost (%)", disabled=(s != "Profit Boost (%)"))
         with col3:
             hb = st.multiselect("Hedge Book(s)", [k for k in book_map.keys() if k != b], placeholder="All Books")
         with col4:
             sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[], placeholder="Select sports...")
         
         btn_col1, btn_col2 = st.columns(2)
-        with btn_col1:
-            run_scan = st.form_submit_with_clicks(label="Execute Universal Scan Engine")
+        with btn_col1: add_to_q = st.form_submit_button("Add to Queue", use_container_width=True)
+        with btn_col2: quick_scan = st.form_submit_button("Quick Scan", use_container_width=True)
 
-    if run_scan:
-        params = {'book': b, 'strat': s, 'wager': w, 'boost_val': main_boost_val, 'hedge_books': hb, 'sports': sp}
-        if not sp:
-            st.error("Please pick at least one tier-1 sport in the filter pool before firing.")
+# --- EXECUTE TOP CONFIG ACTIONS ---
+if quick_scan:
+    if not sp: st.error("Select at least one sport.")
+    elif w <= 0: st.error("Enter a wager amount.")
+    else:
+        temp_p = {"book": b, "strat": s, "wager": w, "sports": sp, "hedge_books": hb, "boost_val": main_boost_val}
+        results = run_promo_scan(temp_p)
+        display_results(results, temp_p)
+
+if add_to_q:
+    if not sp: st.error("Select at least one sport.")
+    elif w <= 0: st.error("Enter a wager amount.")
+    else:
+        st.session_state.promos.append({"book": b, "strat": s, "wager": w, "sports": sp, "hedge_books": hb, "boost_val": main_boost_val})
+
+# --- RENDER SCAN QUEUE AREA ---
+if st.session_state.promos:
+    st.subheader("Scan Queue")
+    for i, p in enumerate(st.session_state.promos):
+        q_col1, q_col2 = st.columns([9.2, 0.8])
+        with q_col1:
+            hedge_label = ", ".join(p['hedge_books']) if p['hedge_books'] else "ALL"
+            boost_str = f" (+{p['boost_val']}% Boost)" if p['strat'] == "Profit Boost (%)" else ""
+            st.info(f"**{p['book'].upper()}** vs **{hedge_label}** | {p['strat']}{boost_str} | ${p['wager']} | {', '.join(p['sports'])}")
+        with q_col2:
+            if st.button("✕", key=f"rm_{i}"):
+                st.session_state.promos.pop(i)
+                st.rerun()
+    
+    run_col, clear_col, cache_col = st.columns([3, 1, 1])
+    with run_col:
+        if st.button("Run All in Queue", use_container_width=True):
+            for promo_item in st.session_state.promos:
+                scan_results = run_promo_scan(promo_item)
+                display_results(scan_results, promo_item)
+                st.divider() 
+    with clear_col:
+        if st.button("Clear Queue", use_container_width=True):
+            st.session_state.promos = []
+            st.rerun()
+    with cache_col:
+        if st.button("Clear Cache", use_container_width=True):
+            st.cache_data.clear()
+            st.toast("Cache cleared!")
+
+st.write("")
+st.divider()
+
+# ========================================================
+# MIDDLE MODULE: MULTI-BOOK SOCCER ENGINE (SYMMETRIC PROMO + CASH FIELD TRACKER)
+# ========================================================
+st.markdown("### ⚽ Multi-Book Soccer Booster Engine (3-Way leg Configs)")
+with st.expander("Configure Multi-Source Book Soccer Boost Options", expanded=True):
+    sc_c1, sc_c2, sc_c3 = st.columns(3)
+    
+    with sc_c1:
+        st.subheader("Book 1 (Leg A)")
+        sb1 = st.selectbox("Bookmaker leg A", list(book_map.keys()), index=0, key="sb1_k")
+        sw1 = st.number_input("Wager Amount ($)", min_value=0.0, value=0.0, step=5.0, key="sw1_k", help="Base stake size to anchor the remaining leg math from.")
+        ss1 = st.selectbox("Booster Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=1, key="ss1_k")
+        cap1_val = st.number_input("Booster Wager ($)", min_value=0.0, value=0.0, step=5.0, key="cv1", help="Max allowed promo cap limit. Balance spins over to standard cash if exceeded.")
+        sbo1 = st.number_input("Booster Value (%)", min_value=0, value=0, step=5, key="sbo1_k", disabled=(ss1 != "Profit Boost (%)"))
+
+    with sc_c2:
+        st.subheader("Book 2 (Leg B)")
+        sb2 = st.selectbox("Bookmaker Leg B", list(book_map.keys()), index=1, key="sb2_k")
+        ss2 = st.selectbox("Booster Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="ss2_k")
+        cap2_val = st.number_input("Booster Wager ($)", min_value=0.0, value=0.0, step=5.0, key="cv2")
+        sbo2 = st.number_input("Booster Value (%)", min_value=0, value=0, step=5, key="sbo2_k", disabled=(ss2 != "Profit Boost (%)"))
+
+    with sc_c3:
+        st.subheader("Book 3 (Leg C)")
+        sb3 = st.selectbox("Bookmaker Leg C", list(book_map.keys()), index=2, key="sb3_k")
+        ss3 = st.selectbox("Booster Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="ss3_k")
+        cap3_val = st.number_input("Booster Wager ($)", min_value=0.0, value=0.0, step=5.0, key="cv3")
+        sbo3 = st.number_input("Booster Value (%)", min_value=0, value=0, step=5, key="sbo3_k", disabled=(ss3 != "Profit Boost (%)"))
+
+    if st.button("Execute Soccer Multi-Boost Optimization Scan", use_container_width=True):
+        if sw1 <= 0:
+            st.error("Please enter an initial Book 1 Wager Amount to establish base conversion targeting.")
+        elif sb1 == sb2 or sb1 == sb3 or sb2 == sb3:
+            st.error("Error: All 3 legs must be assigned to separate, distinct bookmakers to verify arbitrage coverage.")
         else:
-            results = run_promo_scan(params)
-            display_results(results, params)
+            sc_payload = {
+                "book1": sb1, "wager1": sw1, "strat1": ss1, "boost1": sbo1, "cap1_val": cap1_val,
+                "book2": sb2, "strat2": ss2, "boost2": sbo2, "cap2_val": cap2_val,
+                "book3": sb3, "strat3": ss3, "boost3": sbo3, "cap3_val": cap3_val
+            }
+            sc_results = run_multi_book_soccer_scan(sc_payload)
+            st.session_state.soccer_results_cache = sc_results
+
+if 'soccer_results_cache' in st.session_state:
+    display_soccer_results(st.session_state.soccer_results_cache)
+    if st.button("Clear Soccer Grid Display", use_container_width=True):
+        del st.session_state.soccer_results_cache
+        st.rerun()
+
+st.write("")
+st.divider()
 
 # ========================================================
-# ADVANCED LAYER: COMPLEX SOCCER MATRIX ENGINE
+# BOTTOM MODULE: BET & GET FINDER
 # ========================================================
-with st.expander("Complex Soccer Engine (Multi-Book Tri-Booster Router)", expanded=False):
-    st.caption("Calculate 3-way arbitrage models across up to three independent promos simultaneously with dynamic overflow cash splitting.")
+st.markdown("### 🟢 Bet & Get Finder (No Boost Required)")
+with st.expander("Configure Bet & Get Promotion Parameters", expanded=False):
+    bg_book = st.selectbox("Qualifying Bookmaker Target", list(book_map.keys()), key="bg_b")
     
-    with st.form("soccer_form"):
-        sc1, sc2, sc3 = st.columns(3)
+    col_w, col_v = st.columns(2)
+    with col_w:
+        bg_wager = st.number_input("Required Wager Amount ($)", min_value=0.0, value=0.0, key="bg_w")
+    with col_v:
+        bg_bonus = st.number_input("Bonus Bet Reward Expected ($)", min_value=0.0, value=0.0, key="bg_bon")
         
-        with sc1:
-            st.markdown("##### Leg 1 (Outcome A)")
-            s_b1 = st.selectbox("Book 1", list(book_map.keys()), key="sb1")
-            s_st1 = st.selectbox("Promo 1", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], key="sst1")
-            s_w1 = st.number_input("Target Primary Wager ($)", min_value=0.0, value=10.0, step=5.0, key="sw1")
-            s_bst1 = st.number_input("Boost % (Leg 1)", min_value=0, value=0, step=5, key="sbst1")
-            s_cap1 = st.number_input("Promo Max Cap ($)", min_value=0.0, value=0.0, help="0 means uncapped/no cash split needed", key="scap1")
-            
-        with sc2:
-            st.markdown("##### Leg 2 (Outcome B)")
-            s_b2 = st.selectbox("Book 2", [k for k in book_map.keys() if k != s_b1], key="sb2")
-            s_st2 = st.selectbox("Promo 2", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], key="sst2")
-            st.write(" *Stake determined dynamically based on Leg 1 payoff structural layout*")
-            s_bst2 = st.number_input("Boost % (Leg 2)", min_value=0, value=0, step=5, key="sbst2")
-            s_cap2 = st.number_input("Promo Max Cap ($)", min_value=0.0, value=0.0, help="0 means uncapped", key="scap2")
-            
-        with sc3:
-            st.markdown("##### Leg 3 (Draw)")
-            s_b3 = st.selectbox("Book 3", list(book_map.keys()), key="sb3")
-            s_st3 = st.selectbox("Promo 3", ["Straight Cash", "Profit Boost (%)", "Bonus Bet"], key="sst3")
-            st.write(" *Stake determined dynamically based on Leg 1 payoff structural layout*")
-            s_bst3 = st.number_input("Boost % (Leg 3)", min_value=0, value=0, step=5, key="sbst3")
-            s_cap3 = st.number_input("Promo Max Cap ($)", min_value=0.0, value=0.0, help="0 means uncapped", key="scap3")
-
-        soccer_scan = st.form_submit_with_clicks(label="Execute Triple-Leg Optimized Run")
-
-    if soccer_scan:
-        soccer_params = {
-            'book1': s_b1, 'strat1': s_st1, 'wager1': s_w1, 'boost1': s_bst1, 'cap1_val': s_cap1,
-            'book2': s_b2, 'strat2': s_st2, 'boost2': s_bst2, 'cap2_val': s_cap2,
-            'book3': s_b3, 'strat3': s_st3, 'boost3': s_bst3, 'cap3_val': s_cap3
-        }
-        soc_results = run_multi_book_soccer_scan(soccer_params)
-        display_soccer_results(soc_results)
-
-# ========================================================
-# OPTIMIZATION LAYER: DEDICATED BET & GET TRACKER
-# ========================================================
-with st.expander("Bet & Get Tracker", expanded=False):
-    st.caption("Calculate the exact qualifying equity cost for 'Bet $X, Get $Y' vouchers to lock down optimal returns.")
+    bg_sports = st.multiselect("Leagues to Search", list(sports_map.keys()), default=[], key="bg_s", placeholder="Select sports...")
     
-    with st.form("bet_get_form"):
-        bg_col1, bg_col2, bg_col3 = st.columns(3)
-        with bg_col1:
-            bg_b = st.selectbox("Target Book (Qualifier placement)", list(book_map.keys()), key="bg_b")
-            bg_w = st.number_input("Required Qualification Stake ($)", min_value=5.0, value=25.0, step=5.0, key="bg_w")
-        with bg_col2:
-            bg_bonus = st.number_input("Expected Bonus Voucher Received ($)", min_value=0.0, value=10.0, step=5.0, key="bg_bonus")
-        with bg_col3:
-            bg_sp = st.multiselect("Eligible Sport Leagues", list(sports_map.keys()), default=list(sports_map.keys())[:2], key="bg_sp")
-            
-        bg_scan = st.form_submit_with_clicks(label="Map Minimal Qualifying Loss Paths")
+    if st.button("Find Cheapest Qualification Paths", use_container_width=True):
+        if bg_wager <= 0 or bg_bonus <= 0 or not bg_sports:
+            st.error("Fill out all parameters and select at least one league.")
+        else:
+            bg_payload = {"book": bg_book, "wager": bg_wager, "bonus_val": bg_bonus, "sports": bg_sports}
+            bg_results = run_bet_get_scan(bg_payload)
+            st.session_state.bg_results_cache = (bg_results, bg_payload)
 
-    if bg_scan:
-        bg_params = {'book': bg_b, 'wager': bg_w, 'bonus_val': bg_bonus, 'sports': bg_sp}
-        bg_results = run_bet_get_scan(bg_params)
-        display_bet_get_results(bg_results, bg_params)
+# Render results panel for Bet & Get right at the bottom zone
+if 'bg_results_cache' in st.session_state:
+    display_bet_get_results(st.session_state.bg_results_cache[0], st.session_state.bg_results_cache[1])
+    if st.button("Clear Bet & Get Display", use_container_width=True):
+        del st.session_state.bg_results_cache
+        st.rerun()
