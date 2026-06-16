@@ -733,7 +733,7 @@ with st.expander("Dedicated Bet & Get Qualifier Path Finder", expanded=False):
             bg_w = st.number_input("Required Qualification Stake ($)", min_value=0.0, value=0.0, step=5.0)
         with bgc2:
             bg_v = st.number_input("Returned Bonus Value Amount ($)", min_value=0.0, value=0.0, step=5.0)
-            bg_sp = st.multiselect("Market Asset Pool Filter", list(sports_map.keys()), default=list(sports_map.keys()))
+            bg_sp = st.multiselect("Market Asset Pool Filter", list(sports_map.keys()), default=[])
             
         bg_submit = st.form_submit_button("Locate Qualification Baselines")
         
