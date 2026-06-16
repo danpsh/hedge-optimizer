@@ -645,13 +645,9 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
             st.rerun()
 
     with st.form("soccer_form"):
-        # --- LOOK-AHEAD FILTER (slider only) ---
-        with st.container(border=True):
-            today = datetime.now().date()
-            la_days = st.slider("📅 Look-Ahead Window (Days)", min_value=1, max_value=14, value=3,
-                                help="Include games up to this many days from today")
-            lookahead_end = today + timedelta(days=la_days - 1)
-            st.caption(f"Scanning **{la_days} day{'s' if la_days > 1 else ''}** — today through **{lookahead_end.strftime('%b %d, %Y')}**")
+        # Look-ahead: fixed 3-day window (today + 2)
+        today = datetime.now().date()
+        lookahead_end = today + timedelta(days=2)
 
         st.divider()
 
@@ -662,7 +658,7 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
                 st.subheader("Leg 1 (Outcome A)")
                 sb1 = st.selectbox("Book", list(book_map.keys()), index=0, key="sc_book1")
                 ss1 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type1")
-                sbv1 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost1", disabled=(ss1 != "Profit Boost (%)"))
+                sbv1 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost1")
                 sw1 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake1")
                 scap1 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap1")
                 smax1 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay1")
@@ -671,7 +667,7 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
                 st.subheader("Leg 2 (Outcome B)")
                 sb2 = st.multiselect("Book(s)", list(book_map.keys()), default=list(book_map.keys()), placeholder="Select books...", key="sc_book2")
                 ss2 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type2")
-                sbv2 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost2", disabled=(ss2 != "Profit Boost (%)"))
+                sbv2 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost2")
                 sw2 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake2")
                 scap2 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap2")
                 smax2 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay2")
@@ -680,7 +676,7 @@ with st.expander("Soccer Multi-Book Complex Grid (3-Way Overrides)", expanded=Fa
                 st.subheader("Leg 3 (Draw)")
                 sb3 = st.multiselect("Book(s)", list(book_map.keys()), default=list(book_map.keys()), placeholder="Select books...", key="sc_book3")
                 ss3 = st.selectbox("Promo Type", ["Straight Cash", "Profit Boost (%)", "Bonus Bet", "No-Sweat Bet"], index=0, key="sc_type3")
-                sbv3 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost3", disabled=(ss3 != "Profit Boost (%)"))
+                sbv3 = st.number_input("Boost %", min_value=0, value=0, step=5, key="sc_boost3")
                 sw3 = st.number_input("Stake ($)", min_value=0.0, value=50.0, step=5.0, key="sc_stake3")
                 scap3 = st.number_input("Promo Cap ($)", min_value=0.0, value=0.0, help="Max stake eligible for promo. 0 = no cap.", key="sc_cap3")
                 smax3 = st.number_input("Max Payout Cap ($)", min_value=0.0, value=0.0, help="Book's cap on boosted winnings. 0 = no cap.", key="sc_maxpay3")
