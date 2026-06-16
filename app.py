@@ -551,8 +551,8 @@ def display_soccer_results(opps):
                     body += f"**{team} @ {price:+}**"
 
                     with col:
-                        color_fn(body, help=promo_help)
-                        st.caption(f"**{label}**")
+                        color_fn(body)
+                        st.caption(f"**{label}** — {promo_help}")
 
                 leg_card(cl1, "BET 1", op['o1_book'], op['o1_strat'], op['o1_boost'],
                          op['o1_wager'], op['o1_promo'], op['o1_cash'], op['o1_team'], op['o1_price'], st.info)
