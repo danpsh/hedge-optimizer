@@ -515,31 +515,65 @@ def display_results(all_opps, p):
 def display_soccer_results(opps):
     st.markdown("<div class='soccer-header'><h3>Optimized Multi-Book Soccer Arbitrage Paths</h3></div>", unsafe_allow_html=True)
     sorted_opps = sorted(opps, key=lambda x: x['net_profit'], reverse=True)
-    
+
     if not sorted_opps:
         st.warning("No matches pairing your designated book criteria were discovered.")
     else:
         for i, op in enumerate(sorted_opps[:10]):
-            header = f"SOCCER MATCH {i+1} | Return: ${op['net_profit']:.2f} | {op['time']} | {op['game']}"
+            profit = op['net_profit']
+            profit_sign = "+" if profit >= 0 else ""
+            # Lead with profit, then time and game
+            header = f"#{i+1} | {op['time']} | {op['game']} | 💰 {profit_sign}${profit:.2f}"
             with st.expander(header):
                 cl1, cl2, cl3 = st.columns(3)
-                
-                # Leg 1 Panel
-                with cl1:
-                    b1_str = f" ({op['o1_strat']} +{op['o1_boost']}% 🎉)" if op['o1_boost'] > 0 else f" ({op['o1_strat']})"
-                    st.info(f"**OUTCOME 1**\n\n**{op['o1_book']}**\n*{b1_str}*\n\nTotal Bet: **${op['o1_wager']:.2f}**\n\n↳ Booster Stake: `${op['o1_promo']:.2f}`\n\n↳ Cash Override: `${op['o1_cash']:.2f}`\n\n{op['o1_team']} @ {op['o1_price']:+}")
-                
-                # Leg 2 Panel
-                with cl2:
-                    b2_str = f" ({op['o2_strat']} +{op['o2_boost']}% 🎉)" if op['o2_boost'] > 0 else f" ({op['o2_strat']})"
-                    st.success(f"**OUTCOME 2**\n\n**{op['o2_book']}**\n*{b2_str}*\n\nTotal Bet: **${op['o2_wager']:.2f}**\n\n↳ Booster Stake: `${op['o2_promo']:.2f}`\n\n↳ Cash Override: `${op['o2_cash']:.2f}`\n\n{op['o2_team']} @ {op['o2_price']:+}")
-                
-                # Leg 3 Panel
-                with cl3:
-                    b3_str = f" ({op['o3_strat']} +{op['o3_boost']}% 🎉)" if op['o3_boost'] > 0 else f" ({op['o3_strat']})"
-                    st.warning(f"**OUTCOME 3**\n\n**{op['o3_book']}**\n*{b3_str}*\n\nTotal Bet: **${op['o3_wager']:.2f}**\n\n↳ Booster Stake: `${op['o3_promo']:.2f}`\n\n↳ Cash Override: `${op['o3_cash']:.2f}`\n\n{op['o3_team']} @ {op['o3_price']:+}")
-                
-                st.metric("Risk-Free Profit Generated", f"${op['net_profit']:.2f}")
+
+                def leg_card(col, label, book, strat, boost, wager, promo, cash, team, price, color_fn):
+                    # Build promo type label — no asterisk, tooltip instead
+                    if boost > 0:
+                        promo_label = f"{strat} +{boost}% 🎉"
+                        promo_help = f"Profit boost of {boost}% applied to this leg's odds."
+                    else:
+                        promo_label = strat
+                        promo_help = {
+                            "Straight Cash": "Standard cash bet — no promo applied.",
+                            "Bonus Bet": "Bonus bet: stake not returned on win, only profit.",
+                            "No-Sweat Bet": "No-sweat: ~65% of stake refunded as bonus if lost.",
+                        }.get(strat, "")
+
+                    # Only show promo breakdown rows for non-Straight Cash
+                    show_breakdown = strat != "Straight Cash"
+
+                    sep = "\n\n"
+                    body = f"**{book}**" + sep + f"*{promo_label}*" + sep + f"Total Bet: **${wager:.2f}**" + sep
+                    if show_breakdown:
+                        body += f"\u21b3 Promo Stake: `${promo:.2f}`" + sep
+                        body += f"\u21b3 Cash Top-Up: `${cash:.2f}`" + sep
+                    body += f"**{team} @ {price:+}**"
+
+                    with col:
+                        color_fn(body, help=promo_help)
+                        st.caption(f"**{label}**")
+
+                leg_card(cl1, "BET 1", op['o1_book'], op['o1_strat'], op['o1_boost'],
+                         op['o1_wager'], op['o1_promo'], op['o1_cash'], op['o1_team'], op['o1_price'], st.info)
+                leg_card(cl2, "BET 2", op['o2_book'], op['o2_strat'], op['o2_boost'],
+                         op['o2_wager'], op['o2_promo'], op['o2_cash'], op['o2_team'], op['o2_price'], st.success)
+                leg_card(cl3, "BET 3", op['o3_book'], op['o3_strat'], op['o3_boost'],
+                         op['o3_wager'], op['o3_promo'], op['o3_cash'], op['o3_team'], op['o3_price'], st.warning)
+
+                # Full-width profit banner — green if positive, red if negative
+                banner_color = "#16a34a" if profit >= 0 else "#dc2626"
+                banner_bg    = "#f0fdf4" if profit >= 0 else "#fef2f2"
+                banner_border= "#bbf7d0" if profit >= 0 else "#fecaca"
+                st.markdown(
+                    f"<div style='margin-top:12px;padding:14px 20px;background:{banner_bg};"
+                    f"border:1px solid {banner_border};border-left:5px solid {banner_color};"
+                    f"border-radius:8px;display:flex;align-items:center;gap:16px;'>"
+                    f"<span style='font-size:0.85rem;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em;'>Net Profit</span>"
+                    f"<span style='font-size:1.5rem;font-family:monospace;font-weight:700;color:{banner_color};'>{profit_sign}${profit:.2f}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
 
 def display_bet_get_results(opps, bg):
     st.markdown(f"<div class='betget-header'><h3>Optimized Qualification Paths for {bg['book']}</h3></div>", unsafe_allow_html=True)
