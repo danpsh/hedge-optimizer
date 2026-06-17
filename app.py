@@ -506,8 +506,17 @@ def display_results(all_opps, p):
         st.warning(f"No profitable matches found.")
     else:
         for i, op in enumerate(sorted_opps[:15]):
-            conv_str = f" | Using {op['used_boost']}% Boost" if op.get('market_type') == "2-way" and op.get('used_boost', 0) > 0 else ""
-            header_title = f"#{i+1} | {op['time']} | {op['game']}{conv_str} | {('+' if op['exact_profit'] >= 0 else '')}${op['exact_profit']:.2f}"
+            boost_str = f" | +{op['used_boost']}% Boost" if op.get('market_type') == "2-way" and op.get('used_boost', 0) > 0 else ""
+            profit = op['exact_profit']
+            profit_sign = '+' if profit >= 0 else ''
+            if op['strat'] == "Bonus Bet" and p.get('conv_rate', 65) > 0:
+                rate = p['conv_rate']
+                converted = profit * (rate / 100)
+                conv_sign = '+' if converted >= 0 else ''
+                conv_str = f" ({conv_sign}${converted:.2f} @ {rate}%)"
+            else:
+                conv_str = ""
+            header_title = f"#{i+1} | {op['time']} | {op['game']}{boost_str} | {profit_sign}${profit:.2f}{conv_str}"
             
             with st.expander(header_title):
                 if op.get('market_type') == "3-way":
@@ -531,7 +540,6 @@ def display_soccer_results(opps):
         for i, op in enumerate(sorted_opps[:10]):
             profit = op['net_profit']
             profit_sign = "+" if profit >= 0 else ""
-            # Lead with profit, then time and game
             header = f"#{i+1} | {op['time']} | {op['game']} | {profit_sign}${profit:.2f}"
             with st.expander(header):
                 cl1, cl2, cl3 = st.columns(3)
@@ -654,7 +662,7 @@ with st.expander("Main Boost Engine", expanded=True):
 
     if promo_submit:
         active_sports = sp if sp else list(sports_map.keys())
-        p_config = {"book": b, "strat": s, "boost_val": main_boost_val, "wager": w, "hedge_books": hb, "sports": active_sports}
+        p_config = {"book": b, "strat": s, "boost_val": main_boost_val, "wager": w, "hedge_books": hb, "sports": active_sports, "conv_rate": 65}
         results = run_promo_scan(p_config)
         display_results(results, p_config)
 
