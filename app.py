@@ -27,6 +27,12 @@ st.markdown("""
         font-family: 'Roboto Mono', monospace;
         font-size: 1.4rem !important;
     }
+    /* Prevent metric font size leaking into expander headers */
+    [data-testid="stExpander"] summary {
+        font-size: 0.95rem !important;
+        font-weight: 500 !important;
+        font-family: 'Inter', sans-serif !important;
+    }
     .promo-header {
         background-color: #e2e8f0;
         padding: 10px;
