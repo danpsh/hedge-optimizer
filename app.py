@@ -515,7 +515,13 @@ def display_results(all_opps, p):
             boost_str = f" | +{op['used_boost']}% Boost" if op.get('market_type') == "2-way" and op.get('used_boost', 0) > 0 else ""
             profit = op['exact_profit']
             profit_sign = '+' if profit >= 0 else ''
-            header_title = f"#{i+1} | {op['time']} | {op['game']}{boost_str} | {profit_sign}${profit:.2f}"
+            if op['strat'] == "Bonus Bet":
+                bonus_wager = op.get('exact_w1', op.get('wager', 0))
+                conv_rate = (profit / bonus_wager * 100) if bonus_wager > 0 else 0
+                conv_str = f" ({conv_rate:.1f}% conv)"
+            else:
+                conv_str = ""
+            header_title = f"#{i+1} | {op['time']} | {op['game']}{boost_str} | {profit_sign}${profit:.2f}{conv_str}"
             
             with st.expander(header_title):
                 if op.get('market_type') == "3-way":
@@ -563,7 +569,8 @@ def display_soccer_results(opps):
                     body = f"**{book}**" + sep + f"*{promo_label}*" + sep + f"Total Bet: **${wager:.2f}**" + sep
                     if show_breakdown:
                         body += f"\u21b3 Promo Stake: `${promo:.2f}`" + sep
-                        body += f"\u21b3 Cash Top-Up: `${cash:.2f}`" + sep
+                        if cash > 0:
+                            body += f"\u21b3 Cash Top-Up: `${cash:.2f}`" + sep
                     body += f"**{team} @ {price:+}**"
 
                     with col:
