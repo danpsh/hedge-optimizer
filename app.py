@@ -390,7 +390,16 @@ def run_multi_book_soccer_scan(sc):
                                     "o3_book": o3['book_title'], "o3_team": o3['team'], "o3_price": o3['price'], "o3_wager": w3_total, "o3_promo": w3_promo, "o3_cash": w3_cash, "o3_strat": sc['strat3'], "o3_boost": sc['boost3'] if sc['strat3'] == "Profit Boost (%)" else 0
                                 })
         status.update(label="Scan complete.", state="complete")
-    return soccer_opps
+
+    # Deduplicate — collapse same game/books regardless of leg order
+    seen = set()
+    deduped = []
+    for op in soccer_opps:
+        key = (op['game'], frozenset([op['o1_book'], op['o2_book'], op['o3_book']]))
+        if key not in seen:
+            seen.add(key)
+            deduped.append(op)
+    return deduped
 
 
 # --- DEDICATED BET & GET SCAN ENGINE ---
