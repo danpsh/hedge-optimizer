@@ -515,14 +515,7 @@ def display_results(all_opps, p):
             boost_str = f" | +{op['used_boost']}% Boost" if op.get('market_type') == "2-way" and op.get('used_boost', 0) > 0 else ""
             profit = op['exact_profit']
             profit_sign = '+' if profit >= 0 else ''
-            if op['strat'] == "Bonus Bet" and p.get('conv_rate', 65) > 0:
-                rate = p['conv_rate']
-                converted = profit * (rate / 100)
-                conv_sign = '+' if converted >= 0 else ''
-                conv_str = f" ({conv_sign}${converted:.2f} @ {rate}%)"
-            else:
-                conv_str = ""
-            header_title = f"#{i+1} | {op['time']} | {op['game']}{boost_str} | {profit_sign}${profit:.2f}{conv_str}"
+            header_title = f"#{i+1} | {op['time']} | {op['game']}{boost_str} | {profit_sign}${profit:.2f}"
             
             with st.expander(header_title):
                 if op.get('market_type') == "3-way":
