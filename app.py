@@ -155,14 +155,17 @@ def fetch_event_odds(sport_key, event_id, market='draw_no_bet'):
 def _get_market(bm, market_key):
     return next((m for m in bm['markets'] if m['key'] == market_key), None)
 
-def build_flat_odds_h2h(game, allowed_keys):
-    """Standard h2h — passes all outcomes through as-is."""
+def build_flat_odds_h2h(game, allowed_keys, require_outcomes=None):
+    """Standard h2h. If require_outcomes is set (2 or 3), only include
+    bookmakers whose h2h market has exactly that many outcomes."""
     flat = []
     for bm in game['bookmakers']:
         if bm['key'] not in allowed_keys:
             continue
         market = _get_market(bm, 'h2h')
         if not market:
+            continue
+        if require_outcomes is not None and len(market['outcomes']) != require_outcomes:
             continue
         for o in market['outcomes']:
             flat.append({
@@ -253,9 +256,16 @@ def run_promo_scan(p):
                 if game_date_local not in [today_date, tomorrow_date]:
                     continue
 
-                # h2h for all sports. In WC knockout rounds books post 2-way naturally
-                # (no draw), so outcome count determines label: 2=To Advance, 3=Match Result
-                flat_odds = build_flat_odds_h2h(game, allowed_keys)
+                # For soccer, filter by exact outcome count based on user's market selection
+                if is_soccer:
+                    want_2way = p.get('soccer_market') == "To Advance (2-way)"
+                    flat_odds = build_flat_odds_h2h(game, allowed_keys, require_outcomes=2 if want_2way else 3)
+                    # if no books have the exact count (e.g. all 3-way on a knockout game),
+                    # fall back to unfiltered h2h so something always shows
+                    if not flat_odds:
+                        flat_odds = build_flat_odds_h2h(game, allowed_keys)
+                else:
+                    flat_odds = build_flat_odds_h2h(game, allowed_keys)
 
                 if not flat_odds:
                     continue
@@ -300,7 +310,7 @@ def run_promo_scan(p):
                                 "game":         game_label,
                                 "sport":        sport_label,
                                 "market_type":  "2-way",
-                                "market_label": "To Advance" if is_soccer else "Match Result",
+                                "market_label": "To Advance" if (is_soccer and p.get("soccer_market") == "To Advance (2-way)") else "Match Result",
                                 "time":         game_time,
                                 "exact_profit": exact_profit,
                                 "exact_hedge":  raw_h,
@@ -799,7 +809,7 @@ st.divider()
 # ================================================================
 with st.expander("Main Boost Engine", expanded=True):
     with st.form("promo_form", clear_on_submit=False):
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+        col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 2])
         with col1:
             with st.container(border=True):
                 b = st.selectbox("Source Book", list(book_map.keys()))
@@ -818,6 +828,14 @@ with st.expander("Main Boost Engine", expanded=True):
         with col4:
             with st.container(border=True):
                 sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[], placeholder="Select sports...")
+        with col5:
+            with st.container(border=True):
+                soccer_market = st.radio(
+                    "Soccer Market",
+                    ["Match Result (3-way)", "To Advance (2-way)"],
+                    index=0,
+                    help="Applies to FIFA World Cup only. Match Result = 90-min moneyline with Draw. To Advance = knockout winner including ET & penalties."
+                )
 
         promo_submit = st.form_submit_button("Scan")
 
@@ -825,7 +843,8 @@ with st.expander("Main Boost Engine", expanded=True):
         active_sports = sp if sp else list(sports_map.keys())
         p_config = {
             "book": b, "strat": s, "boost_val": main_boost_val,
-            "wager": w, "hedge_books": hb, "sports": active_sports
+            "wager": w, "hedge_books": hb, "sports": active_sports,
+            "soccer_market": soccer_market
         }
         results = run_promo_scan(p_config)
         display_results(results, p_config)
