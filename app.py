@@ -9,7 +9,7 @@ st.set_page_config(page_title="Promo Converter", layout="wide")
 # --- CONSTANTS ---
 CENTRAL      = ZoneInfo("America/Chicago")
 CONV_NOSWEAT = 0.65
-CONV_BETGET  = 0.70
+CONV_BETGET  = 0.65
 SOCCER_SPORTS = {"FIFA World Cup"}
 
 # --- PROFESSIONAL THEME ---
@@ -228,6 +228,19 @@ def run_promo_scan(p):
                 continue
 
             st.session_state.api_quota = remaining
+
+            # --- DEBUG: show raw outright structure (remove once working) ---
+            if is_soccer:
+                st.write(f"**DEBUG — outright events returned:** {len(games)}")
+                if games:
+                    g0 = games[0]
+                    st.write(f"First event: `{g0.get('id')}` | commence: `{g0.get('commence_time')}`")
+                    for bm in g0.get('bookmakers', []):
+                        st.write(f"  Book: **{bm['title']}**")
+                        for m in bm.get('markets', []):
+                            outcomes_preview = [f"{o['name']} @ {o['price']}" for o in m['outcomes'][:5]]
+                            st.write(f"    Market `{m['key']}`: {outcomes_preview}")
+            # --- END DEBUG ---
 
             for game in games:
                 commence_time   = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
