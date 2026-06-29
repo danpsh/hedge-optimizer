@@ -239,8 +239,6 @@ def run_promo_scan(p):
         for sport_label in p['sports']:
             sport_key = sports_map[sport_label]
             is_soccer = sport_label in SOCCER_SPORTS
-            # Always fetch h2h — in knockout rounds books post 2-way naturally (no draw),
-            # in group stage they post 3-way. Outcome count determines labeling.
             games, remaining = fetch_odds(sport_key, market='h2h')
 
             if not games:
@@ -249,6 +247,16 @@ def run_promo_scan(p):
 
             st.session_state.api_quota = remaining
 
+            # --- DEBUG: dump raw market structure for first soccer game ---
+            if is_soccer and games:
+                g = games[0]
+                st.write(f"**DEBUG — {g.get('away_team')} vs {g.get('home_team')}**")
+                for bm in g.get('bookmakers', []):
+                    for m in bm.get('markets', []):
+                        names = [o['name'] for o in m.get('outcomes', [])]
+                        st.write(f"- **{bm['title']}** | key:`{m['key']}` | {len(names)} outcomes: `{names}`")
+            # --- END DEBUG ---
+
             for game in games:
                 commence_time   = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                 game_date_local = commence_time.astimezone(CENTRAL).date()
@@ -256,16 +264,7 @@ def run_promo_scan(p):
                 if game_date_local not in [today_date, tomorrow_date]:
                     continue
 
-                # For soccer, filter by exact outcome count based on user's market selection
-                if is_soccer:
-                    want_2way = p.get('soccer_market') == "To Advance (2-way)"
-                    flat_odds = build_flat_odds_h2h(game, allowed_keys, require_outcomes=2 if want_2way else 3)
-                    # if no books have the exact count (e.g. all 3-way on a knockout game),
-                    # fall back to unfiltered h2h so something always shows
-                    if not flat_odds:
-                        flat_odds = build_flat_odds_h2h(game, allowed_keys)
-                else:
-                    flat_odds = build_flat_odds_h2h(game, allowed_keys)
+                flat_odds = build_flat_odds_h2h(game, allowed_keys)
 
                 if not flat_odds:
                     continue
