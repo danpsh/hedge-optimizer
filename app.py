@@ -225,11 +225,7 @@ def run_promo_scan(p):
             sport_key = sports_map[sport_label]
             is_soccer = sport_label in SOCCER_SPORTS
 
-            if is_soccer:
-                # Fetch h2h + draw_no_bet together for soccer so both markets are available
-                games, remaining = fetch_odds_multi_market(sport_key, markets='h2h,draw_no_bet')
-            else:
-                games, remaining = fetch_odds(sport_key, market='h2h')
+            games, remaining = fetch_odds(sport_key, market='h2h')
 
             if not games:
                 st.error(f"Could not fetch data for {sport_label}")
@@ -244,21 +240,23 @@ def run_promo_scan(p):
                 if game_date_local not in [today_date, tomorrow_date]:
                     continue
 
-                # For soccer, route based on user's market selection
+                # Build flat odds — for soccer filter by user's market selection
                 soccer_2way = is_soccer and p.get('soccer_market') == "To Advance (2-way)"
-                soccer_3way = is_soccer and p.get('soccer_market') != "To Advance (2-way)"
 
-                if soccer_3way:
+                # Get all h2h outcomes for this game
+                flat_odds_all = build_flat_odds_h2h(game, allowed_keys)
+
+                if is_soccer and soccer_2way:
+                    # To Advance: strip Draw outcomes so only 2-way remains
+                    flat_odds = [o for o in flat_odds_all if o['team'] != 'Draw']
+                elif is_soccer and not soccer_2way:
+                    # Match Result: only include books that have all 3 outcomes
                     flat_odds = build_flat_odds_3way(game, allowed_keys)
-                elif soccer_2way:
-                    # draw_no_bet = To Advance market (2-way, no draw)
-                    flat_odds = build_flat_odds_market(game, allowed_keys, 'draw_no_bet')
-                    # fallback to h2h filtered to 2 outcomes if draw_no_bet not available
+                    # if no book has all 3 (e.g. knockout stage), fall back to all h2h
                     if not flat_odds:
-                        flat_odds = [o for o in build_flat_odds_h2h(game, allowed_keys)
-                                     if o['team'] != 'Draw']
+                        flat_odds = flat_odds_all
                 else:
-                    flat_odds = build_flat_odds_h2h(game, allowed_keys)
+                    flat_odds = flat_odds_all
 
                 if not flat_odds:
                     continue
