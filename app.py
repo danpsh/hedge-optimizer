@@ -236,67 +236,8 @@ def run_promo_scan(p):
         for sport_label in p['sports']:
             sport_key = sports_map[sport_label]
             is_soccer = sport_label in SOCCER_SPORTS
-            soccer_2way = is_soccer and p.get('soccer_market') == "To Advance (2-way)"
-
-            # --- TO ADVANCE: per-event draw_no_bet (real odds, not derived) ---
-            if soccer_2way:
-                events = fetch_events(sport_key)
-                for ev in events:
-                    ct = datetime.fromisoformat(ev['commence_time'].replace('Z', '+00:00'))
-                    if ct.astimezone(CENTRAL).date() not in [today_date, tomorrow_date]:
-                        continue
-                    event_odds, remaining = fetch_event_odds(sport_key, ev['id'], market='draw_no_bet')
-                    if not event_odds:
-                        continue
-                    st.session_state.api_quota = remaining
-                    flat_odds = build_flat_odds_market(event_odds, allowed_keys, 'draw_no_bet')
-                    if not flat_odds:
-                        continue
-
-                    game_label = f"{ev.get('away_team', 'Away')} vs {ev.get('home_team', 'Home')}"
-                    game_time  = ct.astimezone(CENTRAL).strftime("%m/%d %I:%M %p")
-                    unique_outcomes = list(set(o['team'] for o in flat_odds))
-
-                    if len(unique_outcomes) == 2:
-                        source_odds = [o for o in flat_odds if o['book_key'] == source_book_key]
-                        hedge_odds  = [o for o in flat_odds if o['book_key'] in allowed_hedge_keys]
-                        for s in source_odds:
-                            hedge_teams = [t for t in unique_outcomes if t != s['team']]
-                            if not hedge_teams: continue
-                            opp_team = hedge_teams[0]
-                            eligible = [h for h in hedge_odds if h['team'] == opp_team]
-                            if not eligible: continue
-                            best_h = max(eligible, key=lambda x: x['price'])
-                            sm = get_multiplier(s['price'])
-                            hm = get_multiplier(best_h['price'])
-                            if p['strat'] == "Profit Boost (%)":
-                                sm_eff        = sm * (1 + p['boost_val'] / 100)
-                                target_payout = p['wager'] * (1 + sm_eff)
-                                raw_h         = target_payout / (1 + hm)
-                                exact_profit  = target_payout - p['wager'] - raw_h
-                            elif p['strat'] == "Bonus Bet":
-                                target_payout = p['wager'] * sm
-                                raw_h         = target_payout / (1 + hm)
-                                exact_profit  = target_payout - raw_h
-                            else:
-                                target_payout = p['wager'] * (1 + sm)
-                                raw_h         = (target_payout - p['wager'] * CONV_NOSWEAT) / (1 + hm)
-                                exact_profit  = target_payout - p['wager'] - raw_h
-                            if exact_profit > -10.0:
-                                all_opps.append({
-                                    "game": game_label, "sport": sport_label,
-                                    "market_type": "2-way", "market_label": "To Advance",
-                                    "time": game_time, "exact_profit": exact_profit,
-                                    "exact_hedge": raw_h, "s_team": s['team'],
-                                    "s_book": s['book_title'], "s_price": s['price'],
-                                    "h_book": best_h['book_title'], "h_team": best_h['team'],
-                                    "h_price": best_h['price'], "wager": p['wager'],
-                                    "strat": p['strat'],
-                                    "used_boost": p['boost_val'] if p['strat'] == "Profit Boost (%)" else 0
-                                })
-                continue  # done with To Advance, skip h2h loop
-
-            # --- MATCH RESULT (h2h) ---
+            # Always fetch h2h — in knockout rounds books post 2-way naturally (no draw),
+            # in group stage they post 3-way. Outcome count determines labeling.
             games, remaining = fetch_odds(sport_key, market='h2h')
 
             if not games:
@@ -312,12 +253,9 @@ def run_promo_scan(p):
                 if game_date_local not in [today_date, tomorrow_date]:
                     continue
 
-                if is_soccer:
-                    flat_odds = build_flat_odds_3way(game, allowed_keys)
-                    if not flat_odds:
-                        flat_odds = build_flat_odds_h2h(game, allowed_keys)
-                else:
-                    flat_odds = build_flat_odds_h2h(game, allowed_keys)
+                # h2h for all sports. In WC knockout rounds books post 2-way naturally
+                # (no draw), so outcome count determines label: 2=To Advance, 3=Match Result
+                flat_odds = build_flat_odds_h2h(game, allowed_keys)
 
                 if not flat_odds:
                     continue
@@ -362,7 +300,7 @@ def run_promo_scan(p):
                                 "game":         game_label,
                                 "sport":        sport_label,
                                 "market_type":  "2-way",
-                                "market_label": "Match Result",
+                                "market_label": "To Advance" if is_soccer else "Match Result",
                                 "time":         game_time,
                                 "exact_profit": exact_profit,
                                 "exact_hedge":  raw_h,
@@ -861,7 +799,7 @@ st.divider()
 # ================================================================
 with st.expander("Main Boost Engine", expanded=True):
     with st.form("promo_form", clear_on_submit=False):
-        col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 2])
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
         with col1:
             with st.container(border=True):
                 b = st.selectbox("Source Book", list(book_map.keys()))
@@ -880,14 +818,6 @@ with st.expander("Main Boost Engine", expanded=True):
         with col4:
             with st.container(border=True):
                 sp = st.multiselect("Sports Filter", list(sports_map.keys()), default=[], placeholder="Select sports...")
-        with col5:
-            with st.container(border=True):
-                soccer_market = st.radio(
-                    "Soccer Market",
-                    ["Match Result (3-way)", "To Advance (2-way)"],
-                    index=0,
-                    help="Only applies when FIFA World Cup is selected. Match Result includes Draw; To Advance is head-to-head only."
-                )
 
         promo_submit = st.form_submit_button("Scan")
 
@@ -895,8 +825,7 @@ with st.expander("Main Boost Engine", expanded=True):
         active_sports = sp if sp else list(sports_map.keys())
         p_config = {
             "book": b, "strat": s, "boost_val": main_boost_val,
-            "wager": w, "hedge_books": hb, "sports": active_sports,
-            "soccer_market": soccer_market
+            "wager": w, "hedge_books": hb, "sports": active_sports
         }
         results = run_promo_scan(p_config)
         display_results(results, p_config)
