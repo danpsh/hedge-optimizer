@@ -119,14 +119,26 @@ def fetch_odds(sport_key, market='h2h'):
         return None, "Error"
 
 @st.cache_data(ttl=300)
-def fetch_odds_multi_market(sport_key, markets='h2h,draw_no_bet'):
-    """Fetch multiple markets in one call — used for soccer to get both
-    Match Result (h2h) and To Advance (draw_no_bet) simultaneously."""
-    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
+def fetch_events(sport_key):
+    """Free endpoint — returns event list with IDs. No quota cost."""
+    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/events"
+    params = {'apiKey': API_KEY, 'dateFormat': 'iso'}
+    try:
+        res = requests.get(url, params=params, timeout=10)
+        if res.status_code == 200:
+            return res.json()
+        return []
+    except requests.exceptions.RequestException:
+        return []
+
+@st.cache_data(ttl=300)
+def fetch_event_odds(sport_key, event_id, market='draw_no_bet'):
+    """Per-event odds — costs 1 quota unit. Used for draw_no_bet (To Advance)."""
+    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/events/{event_id}/odds"
     params = {
         'apiKey':     API_KEY,
         'regions':    'us,us2',
-        'markets':    markets,
+        'markets':    market,
         'oddsFormat': 'american'
     }
     try:
@@ -224,7 +236,67 @@ def run_promo_scan(p):
         for sport_label in p['sports']:
             sport_key = sports_map[sport_label]
             is_soccer = sport_label in SOCCER_SPORTS
+            soccer_2way = is_soccer and p.get('soccer_market') == "To Advance (2-way)"
 
+            # --- TO ADVANCE: per-event draw_no_bet (real odds, not derived) ---
+            if soccer_2way:
+                events = fetch_events(sport_key)
+                for ev in events:
+                    ct = datetime.fromisoformat(ev['commence_time'].replace('Z', '+00:00'))
+                    if ct.astimezone(CENTRAL).date() not in [today_date, tomorrow_date]:
+                        continue
+                    event_odds, remaining = fetch_event_odds(sport_key, ev['id'], market='draw_no_bet')
+                    if not event_odds:
+                        continue
+                    st.session_state.api_quota = remaining
+                    flat_odds = build_flat_odds_market(event_odds, allowed_keys, 'draw_no_bet')
+                    if not flat_odds:
+                        continue
+
+                    game_label = f"{ev.get('away_team', 'Away')} vs {ev.get('home_team', 'Home')}"
+                    game_time  = ct.astimezone(CENTRAL).strftime("%m/%d %I:%M %p")
+                    unique_outcomes = list(set(o['team'] for o in flat_odds))
+
+                    if len(unique_outcomes) == 2:
+                        source_odds = [o for o in flat_odds if o['book_key'] == source_book_key]
+                        hedge_odds  = [o for o in flat_odds if o['book_key'] in allowed_hedge_keys]
+                        for s in source_odds:
+                            hedge_teams = [t for t in unique_outcomes if t != s['team']]
+                            if not hedge_teams: continue
+                            opp_team = hedge_teams[0]
+                            eligible = [h for h in hedge_odds if h['team'] == opp_team]
+                            if not eligible: continue
+                            best_h = max(eligible, key=lambda x: x['price'])
+                            sm = get_multiplier(s['price'])
+                            hm = get_multiplier(best_h['price'])
+                            if p['strat'] == "Profit Boost (%)":
+                                sm_eff        = sm * (1 + p['boost_val'] / 100)
+                                target_payout = p['wager'] * (1 + sm_eff)
+                                raw_h         = target_payout / (1 + hm)
+                                exact_profit  = target_payout - p['wager'] - raw_h
+                            elif p['strat'] == "Bonus Bet":
+                                target_payout = p['wager'] * sm
+                                raw_h         = target_payout / (1 + hm)
+                                exact_profit  = target_payout - raw_h
+                            else:
+                                target_payout = p['wager'] * (1 + sm)
+                                raw_h         = (target_payout - p['wager'] * CONV_NOSWEAT) / (1 + hm)
+                                exact_profit  = target_payout - p['wager'] - raw_h
+                            if exact_profit > -10.0:
+                                all_opps.append({
+                                    "game": game_label, "sport": sport_label,
+                                    "market_type": "2-way", "market_label": "To Advance",
+                                    "time": game_time, "exact_profit": exact_profit,
+                                    "exact_hedge": raw_h, "s_team": s['team'],
+                                    "s_book": s['book_title'], "s_price": s['price'],
+                                    "h_book": best_h['book_title'], "h_team": best_h['team'],
+                                    "h_price": best_h['price'], "wager": p['wager'],
+                                    "strat": p['strat'],
+                                    "used_boost": p['boost_val'] if p['strat'] == "Profit Boost (%)" else 0
+                                })
+                continue  # done with To Advance, skip h2h loop
+
+            # --- MATCH RESULT (h2h) ---
             games, remaining = fetch_odds(sport_key, market='h2h')
 
             if not games:
@@ -240,23 +312,12 @@ def run_promo_scan(p):
                 if game_date_local not in [today_date, tomorrow_date]:
                     continue
 
-                # Build flat odds — for soccer filter by user's market selection
-                soccer_2way = is_soccer and p.get('soccer_market') == "To Advance (2-way)"
-
-                # Get all h2h outcomes for this game
-                flat_odds_all = build_flat_odds_h2h(game, allowed_keys)
-
-                if is_soccer and soccer_2way:
-                    # To Advance: strip Draw outcomes so only 2-way remains
-                    flat_odds = [o for o in flat_odds_all if o['team'] != 'Draw']
-                elif is_soccer and not soccer_2way:
-                    # Match Result: only include books that have all 3 outcomes
+                if is_soccer:
                     flat_odds = build_flat_odds_3way(game, allowed_keys)
-                    # if no book has all 3 (e.g. knockout stage), fall back to all h2h
                     if not flat_odds:
-                        flat_odds = flat_odds_all
+                        flat_odds = build_flat_odds_h2h(game, allowed_keys)
                 else:
-                    flat_odds = flat_odds_all
+                    flat_odds = build_flat_odds_h2h(game, allowed_keys)
 
                 if not flat_odds:
                     continue
@@ -301,7 +362,7 @@ def run_promo_scan(p):
                                 "game":         game_label,
                                 "sport":        sport_label,
                                 "market_type":  "2-way",
-                                "market_label": "To Advance" if soccer_2way else ("Match Result" if not is_soccer else "Match Result"),
+                                "market_label": "Match Result",
                                 "time":         game_time,
                                 "exact_profit": exact_profit,
                                 "exact_hedge":  raw_h,
