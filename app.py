@@ -233,9 +233,6 @@ def run_promo_scan(p):
                 commence_time   = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                 game_date_local = commence_time.astimezone(CENTRAL).date()
 
-                if game_date_local not in [today_date, tomorrow_date]:
-                    continue
-
                 if is_soccer:
                     # --- OUTRIGHT / QUALIFIER SCAN ---
                     # Outrights list all teams as individual outcomes per book.
@@ -304,6 +301,8 @@ def run_promo_scan(p):
 
                 else:
                     # --- STANDARD H2H SCAN (non-soccer) ---
+                    if game_date_local not in [today_date, tomorrow_date]:
+                        continue
                     flat_odds = build_flat_odds_h2h(game, allowed_keys)
                     if not flat_odds:
                         continue
