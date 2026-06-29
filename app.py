@@ -105,10 +105,10 @@ sports_map = {
 def fetch_odds(sport_key, market='h2h'):
     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
     params = {
-        'apiKey':      API_KEY,
-        'regions':     'us,us2',
-        'markets':     market,
-        'oddsFormat':  'american'
+        'apiKey':     API_KEY,
+        'regions':    'us,us2',
+        'markets':    market,
+        'oddsFormat': 'american'
     }
     try:
         res = requests.get(url, params=params, timeout=10)
@@ -122,36 +122,10 @@ def fetch_odds(sport_key, market='h2h'):
 # --- FLAT ODDS HELPERS ---
 
 def _get_market(bm, market_key):
-    """Return a specific market dict for a bookmaker, or None."""
     return next((m for m in bm['markets'] if m['key'] == market_key), None)
 
-def build_flat_odds_outrights(game, allowed_keys):
-    """
-    Build flat odds for outright/qualifier markets (e.g. team to advance).
-    Outrights have no home/away structure — outcomes are just team names.
-    All outcomes from each eligible book are included (binary per pairing).
-    """
-    flat = []
-    for bm in game['bookmakers']:
-        if bm['key'] not in allowed_keys:
-            continue
-        market = _get_market(bm, 'outrights')
-        if not market:
-            continue
-        for o in market['outcomes']:
-            flat.append({
-                'book_key':   bm['key'],
-                'book_title': bm['title'],
-                'team':       o['name'],
-                'price':      o['price']
-            })
-    return flat
-
 def build_flat_odds_h2h(game, allowed_keys):
-    """
-    Build flat odds for standard h2h markets (non-soccer or fallback).
-    Passes all outcomes through as-is.
-    """
+    """Standard h2h — passes all outcomes through as-is."""
     flat = []
     for bm in game['bookmakers']:
         if bm['key'] not in allowed_keys:
@@ -169,10 +143,7 @@ def build_flat_odds_h2h(game, allowed_keys):
     return flat
 
 def build_flat_odds_3way(game, allowed_keys):
-    """
-    Build flat odds for 3-way soccer match result (team1 / team2 / draw).
-    Uses h2h market, only includes bookmakers that offer all 3 outcomes.
-    """
+    """3-way match result — only includes bookmakers offering all 3 outcomes."""
     flat = []
     for bm in game['bookmakers']:
         if bm['key'] not in allowed_keys:
@@ -194,9 +165,9 @@ def build_flat_odds_3way(game, allowed_keys):
 
 # ================================================================
 # MAIN BOOST ENGINE
-# For soccer: fetches outrights (team to qualify/advance) — binary,
-#             scans all cross-book team pairs for arb.
-# For other sports: fetches h2h, standard 2-way or 3-way logic.
+# All sports use h2h. Outcome count routes the logic:
+#   2 outcomes → 2-way arb (covers soccer qualifier/to-advance lines)
+#   3 outcomes → 3-way arb (non-soccer sports with draw)
 # ================================================================
 def run_promo_scan(p):
     if not p['hedge_books']:
@@ -215,13 +186,7 @@ def run_promo_scan(p):
     with st.status("Running scan...", expanded=False) as status:
         for sport_label in p['sports']:
             sport_key = sports_map[sport_label]
-            is_soccer = sport_label in SOCCER_SPORTS
-
-            if is_soccer:
-                # Outright qualifier odds — team to advance
-                games, remaining = fetch_odds(sport_key, market='outrights')
-            else:
-                games, remaining = fetch_odds(sport_key, market='h2h')
+            games, remaining = fetch_odds(sport_key, market='h2h')
 
             if not games:
                 st.error(f"Could not fetch data for {sport_label}")
@@ -229,223 +194,143 @@ def run_promo_scan(p):
 
             st.session_state.api_quota = remaining
 
-            # --- DEBUG: show raw outright structure (remove once working) ---
-            if is_soccer:
-                st.write(f"**DEBUG — outright events returned:** {len(games)}")
-                if games:
-                    g0 = games[0]
-                    st.write(f"First event: `{g0.get('id')}` | commence: `{g0.get('commence_time')}`")
-                    for bm in g0.get('bookmakers', []):
-                        st.write(f"  Book: **{bm['title']}**")
-                        for m in bm.get('markets', []):
-                            outcomes_preview = [f"{o['name']} @ {o['price']}" for o in m['outcomes'][:5]]
-                            st.write(f"    Market `{m['key']}`: {outcomes_preview}")
-            # --- END DEBUG ---
-
             for game in games:
                 commence_time   = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                 game_date_local = commence_time.astimezone(CENTRAL).date()
 
-                if is_soccer:
-                    # --- OUTRIGHT / QUALIFIER SCAN ---
-                    # Outrights list all teams as individual outcomes per book.
-                    # We treat each unique team name as a "side" and look for
-                    # cross-book pairs where source has one team, hedge has the other.
-                    flat_odds = build_flat_odds_outrights(game, allowed_keys)
-                    if not flat_odds:
-                        continue
+                if game_date_local not in [today_date, tomorrow_date]:
+                    continue
 
-                    # Game label — outrights have no home/away
-                    game_label = game.get('sport_title', 'FIFA World Cup')
-                    game_time  = commence_time.astimezone(CENTRAL).strftime("%m/%d %I:%M %p")
+                flat_odds = build_flat_odds_h2h(game, allowed_keys)
+                if not flat_odds:
+                    continue
 
+                game_label      = f"{game.get('away_team', 'Away')} vs {game.get('home_team', 'Home')}"
+                game_time       = commence_time.astimezone(CENTRAL).strftime("%m/%d %I:%M %p")
+                unique_outcomes = list(set(o['team'] for o in flat_odds))
+
+                # --- 2-WAY BRANCH (includes soccer qualifier lines) ---
+                if len(unique_outcomes) == 2:
                     source_odds = [o for o in flat_odds if o['book_key'] == source_book_key]
                     hedge_odds  = [o for o in flat_odds if o['book_key'] in allowed_hedge_keys]
 
                     for s in source_odds:
-                        # Find the best opposing outcome (different team) from hedge books
-                        eligible = [h for h in hedge_odds if h['team'] != s['team']]
-                        if not eligible:
-                            continue
+                        hedge_teams = [t for t in unique_outcomes if t != s['team']]
+                        if not hedge_teams: continue
+                        opp_team = hedge_teams[0]
 
-                        # Group by team name, take best price per team
-                        team_best = {}
-                        for h in eligible:
-                            if h['team'] not in team_best or h['price'] > team_best[h['team']]['price']:
-                                team_best[h['team']] = h
+                        eligible = [h for h in hedge_odds if h['team'] == opp_team]
+                        if not eligible: continue
 
-                        for opp_team, best_h in team_best.items():
-                            sm  = get_multiplier(s['price'])
-                            hm  = get_multiplier(best_h['price'])
+                        best_h = max(eligible, key=lambda x: x['price'])
+                        sm     = get_multiplier(s['price'])
+                        hm     = get_multiplier(best_h['price'])
 
-                            if p['strat'] == "Profit Boost (%)":
-                                sm_eff        = sm * (1 + p['boost_val'] / 100)
-                                target_payout = p['wager'] * (1 + sm_eff)
-                                raw_h         = target_payout / (1 + hm)
-                                exact_profit  = target_payout - p['wager'] - raw_h
-                            elif p['strat'] == "Bonus Bet":
-                                target_payout = p['wager'] * sm
-                                raw_h         = target_payout / (1 + hm)
-                                exact_profit  = target_payout - raw_h
-                            else:  # No-Sweat Bet
-                                target_payout = p['wager'] * (1 + sm)
-                                raw_h         = (target_payout - p['wager'] * CONV_NOSWEAT) / (1 + hm)
-                                exact_profit  = target_payout - p['wager'] - raw_h
+                        if p['strat'] == "Profit Boost (%)":
+                            sm_eff        = sm * (1 + p['boost_val'] / 100)
+                            target_payout = p['wager'] * (1 + sm_eff)
+                            raw_h         = target_payout / (1 + hm)
+                            exact_profit  = target_payout - p['wager'] - raw_h
+                        elif p['strat'] == "Bonus Bet":
+                            target_payout = p['wager'] * sm
+                            raw_h         = target_payout / (1 + hm)
+                            exact_profit  = target_payout - raw_h
+                        else:  # No-Sweat
+                            target_payout = p['wager'] * (1 + sm)
+                            raw_h         = (target_payout - p['wager'] * CONV_NOSWEAT) / (1 + hm)
+                            exact_profit  = target_payout - p['wager'] - raw_h
 
-                            if exact_profit > -10.0:
-                                all_opps.append({
-                                    "game":         f"{s['team']} vs {opp_team}",
-                                    "sport":        sport_label,
-                                    "market_type":  "2-way",
-                                    "market_label": "Qualifier Odds",
-                                    "time":         game_time,
-                                    "exact_profit": exact_profit,
-                                    "exact_hedge":  raw_h,
-                                    "s_team":       s['team'],
-                                    "s_book":       s['book_title'],
-                                    "s_price":      s['price'],
-                                    "h_book":       best_h['book_title'],
-                                    "h_team":       opp_team,
-                                    "h_price":      best_h['price'],
-                                    "wager":        p['wager'],
-                                    "strat":        p['strat'],
-                                    "used_boost":   p['boost_val'] if p['strat'] == "Profit Boost (%)" else 0
-                                })
+                        if exact_profit > -10.0:
+                            all_opps.append({
+                                "game":         game_label,
+                                "sport":        sport_label,
+                                "market_type":  "2-way",
+                                "market_label": "Qualifier" if sport_label in SOCCER_SPORTS else "Match Result",
+                                "time":         game_time,
+                                "exact_profit": exact_profit,
+                                "exact_hedge":  raw_h,
+                                "s_team":       s['team'],
+                                "s_book":       s['book_title'],
+                                "s_price":      s['price'],
+                                "h_book":       best_h['book_title'],
+                                "h_team":       best_h['team'],
+                                "h_price":      best_h['price'],
+                                "wager":        p['wager'],
+                                "strat":        p['strat'],
+                                "used_boost":   p['boost_val'] if p['strat'] == "Profit Boost (%)" else 0
+                            })
 
-                else:
-                    # --- STANDARD H2H SCAN (non-soccer) ---
-                    if game_date_local not in [today_date, tomorrow_date]:
-                        continue
-                    flat_odds = build_flat_odds_h2h(game, allowed_keys)
-                    if not flat_odds:
-                        continue
+                # --- 3-WAY BRANCH ---
+                elif len(unique_outcomes) == 3:
+                    outcome_groups = {
+                        team: [o for o in flat_odds if o['team'] == team]
+                        for team in unique_outcomes
+                    }
+                    outcome_list = list(outcome_groups.items())
 
-                    game_label = f"{game.get('away_team', 'Away')} vs {game.get('home_team', 'Home')}"
-                    game_time  = commence_time.astimezone(CENTRAL).strftime("%m/%d %I:%M %p")
-                    unique_outcomes = list(set(o['team'] for o in flat_odds))
+                    for i, (_, odds_t1) in enumerate(outcome_list):
+                        for j, (_, odds_t2) in enumerate(outcome_list):
+                            if j == i: continue
+                            for k, (_, odds_t3) in enumerate(outcome_list):
+                                if k == i or k == j: continue
+                                for o1 in odds_t1:
+                                    for o2 in odds_t2:
+                                        for o3 in odds_t3:
+                                            books_used = [o1['book_key'], o2['book_key'], o3['book_key']]
+                                            if len(set(books_used)) != 3: continue
+                                            if source_book_key not in books_used: continue
 
-                    # 3-way branch (sports with draw)
-                    if len(unique_outcomes) == 3:
-                        outcome_groups = {
-                            team: [o for o in flat_odds if o['team'] == team]
-                            for team in unique_outcomes
-                        }
-                        outcome_list = list(outcome_groups.items())
+                                            all_legs = [o1, o2, o3]
+                                            src_idx  = next(n for n, o in enumerate(all_legs) if o['book_key'] == source_book_key)
+                                            src_o    = all_legs[src_idx]
+                                            hedge_os = [o for n, o in enumerate(all_legs) if n != src_idx]
+                                            ho1, ho2 = hedge_os[0], hedge_os[1]
 
-                        for i, (_, odds_t1) in enumerate(outcome_list):
-                            for j, (_, odds_t2) in enumerate(outcome_list):
-                                if j == i: continue
-                                for k, (_, odds_t3) in enumerate(outcome_list):
-                                    if k == i or k == j: continue
-                                    for o1 in odds_t1:
-                                        for o2 in odds_t2:
-                                            for o3 in odds_t3:
-                                                books_used = [o1['book_key'], o2['book_key'], o3['book_key']]
-                                                if len(set(books_used)) != 3: continue
-                                                if source_book_key not in books_used: continue
+                                            sm  = get_multiplier(src_o['price'])
+                                            hm1 = get_multiplier(ho1['price'])
+                                            hm2 = get_multiplier(ho2['price'])
 
-                                                all_legs = [o1, o2, o3]
-                                                src_idx  = next(n for n, o in enumerate(all_legs) if o['book_key'] == source_book_key)
-                                                src_o    = all_legs[src_idx]
-                                                hedge_os = [o for n, o in enumerate(all_legs) if n != src_idx]
-                                                ho1, ho2 = hedge_os[0], hedge_os[1]
+                                            if p['strat'] == "Profit Boost (%)":
+                                                sm_eff       = sm * (1 + p['boost_val'] / 100)
+                                                target_pay   = p['wager'] * (1 + sm_eff)
+                                                h1_stake     = target_pay / (1 + hm1)
+                                                h2_stake     = target_pay / (1 + hm2)
+                                                exact_profit = target_pay - p['wager'] - h1_stake - h2_stake
+                                            elif p['strat'] == "Bonus Bet":
+                                                target_pay   = p['wager'] * sm
+                                                h1_stake     = target_pay / (1 + hm1)
+                                                h2_stake     = target_pay / (1 + hm2)
+                                                exact_profit = target_pay - h1_stake - h2_stake
+                                            else:  # No-Sweat
+                                                target_pay   = p['wager'] * (1 + sm)
+                                                h1_stake     = (target_pay - p['wager'] * CONV_NOSWEAT) / (1 + hm1)
+                                                h2_stake     = (target_pay - p['wager'] * CONV_NOSWEAT) / (1 + hm2)
+                                                exact_profit = target_pay - p['wager'] - h1_stake - h2_stake
 
-                                                sm  = get_multiplier(src_o['price'])
-                                                hm1 = get_multiplier(ho1['price'])
-                                                hm2 = get_multiplier(ho2['price'])
-
-                                                if p['strat'] == "Profit Boost (%)":
-                                                    sm_eff       = sm * (1 + p['boost_val'] / 100)
-                                                    target_pay   = p['wager'] * (1 + sm_eff)
-                                                    h1_stake     = target_pay / (1 + hm1)
-                                                    h2_stake     = target_pay / (1 + hm2)
-                                                    exact_profit = target_pay - p['wager'] - h1_stake - h2_stake
-                                                elif p['strat'] == "Bonus Bet":
-                                                    target_pay   = p['wager'] * sm
-                                                    h1_stake     = target_pay / (1 + hm1)
-                                                    h2_stake     = target_pay / (1 + hm2)
-                                                    exact_profit = target_pay - h1_stake - h2_stake
-                                                else:  # No-Sweat
-                                                    target_pay   = p['wager'] * (1 + sm)
-                                                    h1_stake     = (target_pay - p['wager'] * CONV_NOSWEAT) / (1 + hm1)
-                                                    h2_stake     = (target_pay - p['wager'] * CONV_NOSWEAT) / (1 + hm2)
-                                                    exact_profit = target_pay - p['wager'] - h1_stake - h2_stake
-
-                                                if exact_profit > -10.0:
-                                                    all_opps.append({
-                                                        "game":         game_label,
-                                                        "sport":        sport_label,
-                                                        "market_type":  "3-way",
-                                                        "market_label": "Match Result",
-                                                        "time":         game_time,
-                                                        "exact_profit": exact_profit,
-                                                        "wager":        p['wager'],
-                                                        "strat":        p['strat'],
-                                                        "s_team":       src_o['team'],
-                                                        "s_book":       src_o['book_title'],
-                                                        "s_price":      src_o['price'],
-                                                        "exact_w1":     p['wager'],
-                                                        "h1_book":      ho1['book_title'],
-                                                        "h1_team":      ho1['team'],
-                                                        "h1_price":     ho1['price'],
-                                                        "exact_hedge1": h1_stake,
-                                                        "h2_book":      ho2['book_title'],
-                                                        "h2_team":      ho2['team'],
-                                                        "h2_price":     ho2['price'],
-                                                        "exact_hedge2": h2_stake,
-                                                        "used_boost":   p['boost_val'] if p['strat'] == "Profit Boost (%)" else 0
-                                                    })
-
-                    # 2-way branch
-                    elif len(unique_outcomes) == 2:
-                        source_odds = [o for o in flat_odds if o['book_key'] == source_book_key]
-                        hedge_odds  = [o for o in flat_odds if o['book_key'] in allowed_hedge_keys]
-
-                        for s in source_odds:
-                            hedge_teams = [t for t in unique_outcomes if t != s['team']]
-                            if not hedge_teams: continue
-                            opp_team = hedge_teams[0]
-
-                            eligible = [h for h in hedge_odds if h['team'] == opp_team]
-                            if not eligible: continue
-
-                            best_h = max(eligible, key=lambda x: x['price'])
-                            sm     = get_multiplier(s['price'])
-                            hm     = get_multiplier(best_h['price'])
-
-                            if p['strat'] == "Profit Boost (%)":
-                                sm_eff        = sm * (1 + p['boost_val'] / 100)
-                                target_payout = p['wager'] * (1 + sm_eff)
-                                raw_h         = target_payout / (1 + hm)
-                                exact_profit  = target_payout - p['wager'] - raw_h
-                            elif p['strat'] == "Bonus Bet":
-                                target_payout = p['wager'] * sm
-                                raw_h         = target_payout / (1 + hm)
-                                exact_profit  = target_payout - raw_h
-                            else:  # No-Sweat
-                                target_payout = p['wager'] * (1 + sm)
-                                raw_h         = (target_payout - p['wager'] * CONV_NOSWEAT) / (1 + hm)
-                                exact_profit  = target_payout - p['wager'] - raw_h
-
-                            if exact_profit > -10.0:
-                                all_opps.append({
-                                    "game":         game_label,
-                                    "sport":        sport_label,
-                                    "market_type":  "2-way",
-                                    "market_label": "Match Result",
-                                    "time":         game_time,
-                                    "exact_profit": exact_profit,
-                                    "exact_hedge":  raw_h,
-                                    "s_team":       s['team'],
-                                    "s_book":       s['book_title'],
-                                    "s_price":      s['price'],
-                                    "h_book":       best_h['book_title'],
-                                    "h_team":       best_h['team'],
-                                    "h_price":      best_h['price'],
-                                    "wager":        p['wager'],
-                                    "strat":        p['strat'],
-                                    "used_boost":   p['boost_val'] if p['strat'] == "Profit Boost (%)" else 0
-                                })
+                                            if exact_profit > -10.0:
+                                                all_opps.append({
+                                                    "game":         game_label,
+                                                    "sport":        sport_label,
+                                                    "market_type":  "3-way",
+                                                    "market_label": "Match Result",
+                                                    "time":         game_time,
+                                                    "exact_profit": exact_profit,
+                                                    "wager":        p['wager'],
+                                                    "strat":        p['strat'],
+                                                    "s_team":       src_o['team'],
+                                                    "s_book":       src_o['book_title'],
+                                                    "s_price":      src_o['price'],
+                                                    "exact_w1":     p['wager'],
+                                                    "h1_book":      ho1['book_title'],
+                                                    "h1_team":      ho1['team'],
+                                                    "h1_price":     ho1['price'],
+                                                    "exact_hedge1": h1_stake,
+                                                    "h2_book":      ho2['book_title'],
+                                                    "h2_team":      ho2['team'],
+                                                    "h2_price":     ho2['price'],
+                                                    "exact_hedge2": h2_stake,
+                                                    "used_boost":   p['boost_val'] if p['strat'] == "Profit Boost (%)" else 0
+                                                })
 
         status.update(label="Scan complete.", state="complete")
     return all_opps
@@ -468,7 +353,6 @@ def run_multi_book_soccer_scan(sc):
     with st.status("Running scan...", expanded=False) as status:
         for league_label in sc['leagues']:
             sport_key = sports_map[league_label]
-            # h2h market for match result with draw
             games, remaining = fetch_odds(sport_key, market='h2h')
             if not games:
                 continue
@@ -502,9 +386,9 @@ def run_multi_book_soccer_scan(sc):
                                o1['book_key'] == o3['book_key'] or \
                                o2['book_key'] == o3['book_key']:
                                 continue
-                            if o1['book_key'] != book1_key:        continue
-                            if o2['book_key'] not in book2_keys:   continue
-                            if o3['book_key'] not in book3_keys:   continue
+                            if o1['book_key'] != book1_key:      continue
+                            if o2['book_key'] not in book2_keys: continue
+                            if o3['book_key'] not in book3_keys: continue
 
                             def leg_payout(w_total, strat, boost_pct, m_raw, cap_val):
                                 m_boosted = m_raw * (1 + boost_pct / 100) if strat == "Profit Boost (%)" else m_raw
@@ -514,7 +398,6 @@ def run_multi_book_soccer_scan(sc):
                                 else:
                                     w_promo = w_total if strat != "Straight Cash" else 0.0
                                     w_cash  = 0.0    if strat != "Straight Cash" else w_total
-
                                 if strat == "Bonus Bet":
                                     raw_pay = (w_promo * m_boosted) + (w_cash * (1 + m_raw))
                                     outlay  = w_cash
@@ -593,7 +476,6 @@ def run_multi_book_soccer_scan(sc):
 
         status.update(label="Scan complete.", state="complete")
 
-    # Deduplicate — keep best profit per game/book-set
     seen = {}
     for op in soccer_opps:
         key = (op['game'], frozenset([op['o1_book'], op['o2_book'], op['o3_book']]))
@@ -768,7 +650,6 @@ def display_soccer_results(opps):
                         "Bonus Bet":     "Bonus bet: stake not returned on win, only profit.",
                         "No-Sweat Bet":  "No-sweat: ~65% of stake refunded as bonus if lost.",
                     }.get(strat, "")
-
                 show_breakdown = strat != "Straight Cash"
                 sep  = "\n\n"
                 body = f"**{book}**" + sep + f"*{promo_label}*" + sep + f"Total Bet: **${wager:.2f}**" + sep
@@ -829,7 +710,7 @@ def display_bet_get_results(opps, bg):
 
             mc1, mc2 = st.columns(2)
             with mc1: st.metric("Qualifying Cost (Loss)", f"${op['qualifying_loss']:.2f}")
-            with mc2: st.metric("Net Value Lock (Est. 70% Convert)", f"${op['net_value']:.2f}")
+            with mc2: st.metric("Net Value Lock (Est. 65% Convert)", f"${op['net_value']:.2f}")
 
 
 # ================================================================
