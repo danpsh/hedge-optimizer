@@ -333,7 +333,20 @@ def run_promo_scan(p):
                                                 })
 
         status.update(label="Scan complete.", state="complete")
-    return all_opps
+
+    # Deduplicate — the 3-way permutation loop produces the same game/book-set
+    # multiple times with hedge legs in different column order.
+    # Keep the single best profit per unique (game, promo_book, frozenset_of_all_books).
+    seen = {}
+    for op in all_opps:
+        if op['market_type'] == '3-way':
+            key = (op['game'], op['s_book'],
+                   frozenset([op['s_book'], op['h1_book'], op['h2_book']]))
+        else:
+            key = (op['game'], op['s_book'], op['h_book'])
+        if key not in seen or op['exact_profit'] > seen[key]['exact_profit']:
+            seen[key] = op
+    return list(seen.values())
 
 
 # ================================================================
