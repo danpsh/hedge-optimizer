@@ -171,10 +171,8 @@ def run_promo_scan(p):
     source_book_key = book_map[p['book']]
     allowed_keys    = [source_book_key] + allowed_hedge_keys
 
-    today_date    = datetime.now(CENTRAL).date()
-    tomorrow_date = today_date + timedelta(days=1)
-
-    all_opps = []
+    today_date = datetime.now(CENTRAL).date()
+    all_opps   = []
 
     with st.status("Running scan...", expanded=False) as status:
         for sport_label in p['sports']:
@@ -191,7 +189,7 @@ def run_promo_scan(p):
                 commence_time   = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                 game_date_local = commence_time.astimezone(CENTRAL).date()
 
-                if game_date_local not in [today_date, tomorrow_date]:
+                if not (today_date <= game_date_local <= today_date + timedelta(days=3)):
                     continue
 
                 flat_odds = build_flat_odds_h2h(game, allowed_keys)
@@ -476,10 +474,8 @@ def run_bet_get_scan(bg):
     allowed_hedge_keys = [v for k, v in book_map.items() if v != source_book_key]
     allowed_keys       = [source_book_key] + allowed_hedge_keys
 
-    today_date    = datetime.now(CENTRAL).date()
-    tomorrow_date = today_date + timedelta(days=1)
-
-    bg_opps = []
+    today_date = datetime.now(CENTRAL).date()
+    bg_opps    = []
     projected_bonus_value = bg['bonus_val'] * CONV_BETGET
 
     with st.status("Running scan...", expanded=False) as status:
@@ -495,7 +491,7 @@ def run_bet_get_scan(bg):
                 commence_time   = datetime.fromisoformat(game['commence_time'].replace('Z', '+00:00'))
                 game_date_local = commence_time.astimezone(CENTRAL).date()
 
-                if game_date_local not in [today_date, tomorrow_date]:
+                if not (today_date <= game_date_local <= today_date + timedelta(days=3)):
                     continue
 
                 flat_odds = build_flat_odds_h2h(game, allowed_keys)
@@ -747,7 +743,7 @@ with st.expander("Main Boost Engine", expanded=True):
 with st.expander("3-Way Soccer Engine", expanded=False):
     with st.form("soccer_form"):
         today         = datetime.now(CENTRAL).date()
-        lookahead_end = today + timedelta(days=2)
+        lookahead_end = today + timedelta(days=3)
 
         st.divider()
 
